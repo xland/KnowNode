@@ -1,0 +1,22 @@
+<!--
+  本模板一次插入两个节点，且 CtrlBase.appendTo 取「最后一个元素」作为控件根节点，
+  因此按钮必须放在最后；链接弹窗（.linkDialog）写在按钮之前，由 Link.ready() 挪到 body 后只切换显隐。
+-->
+<div class="linkDialog" hidden>
+  <div class="linkDialogField">
+    <div class="linkDialogLabel">链接地址</div>
+    <input class="linkDialogInput linkDialogUrl" type="text" spellcheck="false" placeholder="https://www.example.com" />
+  </div>
+  <div class="linkDialogField">
+    <div class="linkDialogLabel">显示文本</div>
+    <input class="linkDialogInput linkDialogDisplay" type="text" spellcheck="false" placeholder="链接显示的文字" />
+  </div>
+  <div class="linkDialogBtns">
+    <button type="button" class="linkDialogBtn">取消</button>
+    <button type="button" class="linkDialogBtn linkDialogBtnPrimary">确定</button>
+  </div>
+</div>
+
+<button class="toolBtn" title="插入链接">
+  <span class="toolIcon"></span>
+</button>

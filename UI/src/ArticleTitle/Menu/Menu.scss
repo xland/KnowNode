@@ -1,0 +1,57 @@
+/* 文章列表右键菜单。与分类右键菜单（Category/Menu）同一套视觉，但选择器各自独立：
+   两个菜单只共享"长相"，不共享 DOM，硬塞进一份 scss 反而要让两边的 id 互相知道对方。
+   挂到 document.body 上、不是 #articleTitle 的后代：列表所在的 .articleListContent 是
+   overflow-y:auto 的滚动容器，弹层放在里面会被它裁掉。 */
+#articleMenu {
+  position: fixed;
+  z-index: 1000;
+  display: none;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  user-select: none;
+}
+
+#articleMenu.open {
+  display: block;
+}
+
+/* 菜单项：图标槽 + 文字，横向排布、占满整行，hover 背景横向贯通 */
+#articleMenu .menuItem {
+  display: flex;
+  align-items: center;
+  height: 32px;
+  padding-right: 18px;
+  color: #1f2329;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+#articleMenu .menuItem:hover {
+  background: #fdeceb;
+  color: #e81123;
+}
+
+/* 图标槽：宽度固定 29px、高度与行高取满一行，字形在槽里居中。
+   iconfont.css 的 .icon 也会命中这个 div（字形在内层 <i> 上），所以字号、行高显式写死不靠继承。 */
+#articleMenu .menuItem > .iconBox {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 29px;
+  height: 32px;
+  line-height: 32px;
+}
+
+/* 内层字形：关闭叉本身偏大，字号比常规的 13px 再小一号 */
+#articleMenu .menuItem > .iconBox > i {
+  font-size: 12px;
+  line-height: 32px;
+  transform: translateY(1px);
+}
+
+/* 菜单文字：不换行 */
+#articleMenu .menuItemLabel {
+  white-space: nowrap;
+}

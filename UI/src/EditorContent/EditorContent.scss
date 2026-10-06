@@ -1,0 +1,72 @@
+#editorContent {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: #ffffff;
+  outline: none;
+  padding: 8px 16px;
+  font-size: 15px;
+  font-family: 微软雅黑, "Microsoft YaHei", sans-serif;
+  /* 默认行高 2（相对字号），与工具栏行高档位语义一致；需与 LineHeight.ts 的 DEFAULT_LINE_HEIGHT 同步 */
+  line-height: 2;
+  color: #333333;
+  /* 插入的横线（<hr>）默认外边距。与行高一样留在 CSS 里当默认值，不写成内联 style，
+     入库的 HTML 就只有一个干净的 <hr> */
+  hr {
+    margin: 26px 12px;
+  }
+  /* 引用块的默认样式：灰底 + 左侧框线 + 缩进 + 深灰文字。同理留在 CSS 里当默认值，
+     入库的 HTML 就是一个干净的 <blockquote>（见 Quote.ts） */
+  blockquote {
+    margin: 1em 0 1em 2em;
+    padding: 8px 12px;
+    border-left: 3px solid #999999;
+    background-color: #f0f0f0;
+    color: #555555;
+  }
+  overflow-y: auto;
+  cursor: text;
+  user-select: text;
+
+  /* 标题 h1~h6 的统一规范：级差阶梯字号 + 粗体 + 上下留白。
+     标题元素上可能残留内联字号（如 15px 的段落格式），会盖掉 roosterjs 默认级差，
+     因此这里用 !important 强制统一；选中"普通段落"恢复正文 15px。
+     若标题行被再次手动调字号（FontSize），仍可覆盖该行，符合预期。 */
+  :is(h1, h2, h3, h4, h5, h6) {
+    font-weight: bold !important;
+    margin: 12px 0 6px;
+  }
+  h1 {
+    font-size: 28px !important;
+  }
+  h2 {
+    font-size: 24px !important;
+  }
+  h3 {
+    font-size: 20px !important;
+  }
+  h4 {
+    font-size: 18px !important;
+  }
+  h5 {
+    font-size: 16px !important;
+  }
+  h6 {
+    font-size: 15px !important;
+  }
+
+  /* 代码块：外壳是 rooster 的只读 entity，里面是 shiki 着色的 pre（背景与前景色由 shiki 内联给出）。
+     这里只补排版相关的：间距、圆角、横向滚动。整块不可编辑，双击才打开编辑弹层。 */
+  .codeBlock {
+    margin: 8px 0;
+    padding: 10px 12px;
+    border-radius: 3px;
+    overflow-x: auto;
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    tab-size: 4;
+    /* 代码块是只读 entity，移上去不给输入光标（#editorContent 整体是 cursor: text），
+       否则会让用户以为能直接把光标伸进去改代码——改要双击开弹层 */
+    cursor: default;
+  }
+}

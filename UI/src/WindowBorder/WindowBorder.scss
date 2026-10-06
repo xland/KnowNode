@@ -1,0 +1,101 @@
+// 自绘窗口边框的容器：覆盖整个 body、浮在所有内容之上（z-index 999）。
+// 容器本身 pointer-events: none 让 8 个边框/角点之外的空白区不拦截下面内容的点击；
+// 直接子元素再单独打开 pointer-events: auto，使 8 个边框/角点照常命中 mousedown。
+#windowBorder {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 999;
+
+  > * {
+    pointer-events: auto;
+  }
+}
+
+#borderLeft {
+  position: absolute;
+  z-index: 999;
+  left: 0px;
+  top: 0px;
+  bottom: 0px;
+  width: 4px;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+#borderTop {
+  position: absolute;
+  z-index: 999;
+  left: 0px;
+  top: 0px;
+  right: 0px;
+  height: 4px;
+  background: transparent;
+  cursor: ns-resize;
+}
+
+#borderRight {
+  position: absolute;
+  z-index: 999;
+  right: 0px;
+  top: 0px;
+  bottom: 0px;
+  width: 4px;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+#borderBottom {
+  position: absolute;
+  z-index: 999;
+  left: 0px;
+  right: 0px;
+  bottom: 0px;
+  height: 4px;
+  background: transparent;
+  cursor: ns-resize;
+}
+
+#cornerTopLeft {
+  position: absolute;
+  z-index: 999;
+  left: 0px;
+  top: 0px;
+  width: 5px;
+  height: 5px;
+  background: transparent;
+  cursor: nwse-resize;
+}
+
+#cornerTopRight {
+  position: absolute;
+  z-index: 999;
+  right: 0px;
+  top: 0px;
+  width: 5px;
+  height: 5px;
+  background: transparent;
+  cursor: nesw-resize;
+}
+
+#cornerBottomRight {
+  position: absolute;
+  z-index: 999;
+  right: 0px;
+  bottom: 0px;
+  width: 5px;
+  height: 5px;
+  background: transparent;
+  cursor: nwse-resize;
+}
+
+#cornerBottomLeft {
+  position: absolute;
+  z-index: 999;
+  left: 0px;
+  bottom: 0px;
+  width: 5px;
+  height: 5px;
+  background: transparent;
+  cursor: nesw-resize;
+}

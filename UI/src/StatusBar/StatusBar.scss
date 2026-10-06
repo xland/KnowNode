@@ -1,0 +1,31 @@
+#statusBar {
+  height: 24px;
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  padding: 0 12px;
+  background: #fafafd;
+  border-top: 1px solid #e0e0e4;
+  user-select: none;
+
+  /* 左侧：库级统计，吃掉剩余宽度，放不下就省略 */
+  #statusCounts {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 12px;
+    color: #606060;
+    line-height: 24px;
+  }
+
+  /* 右侧：当前文章字数，按内容宽度靠右，不被左侧挤掉 */
+  #statusWords {
+    flex-shrink: 0;
+    font-size: 12px;
+    color: #909090;
+    line-height: 24px;
+  }
+}

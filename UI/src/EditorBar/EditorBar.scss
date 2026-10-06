@@ -1,0 +1,286 @@
+#editorBar {
+  flex-shrink: 0;
+  height: 30px;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border-bottom: 1px solid #e5e6eb;
+  border-top: 1px solid #e5e6eb;
+  background: #fafafa;
+  user-select: none;
+  /* 按钮都不可收缩，窗口窄到挤不下时整排从这里被裁掉（下拉/弹层都挂到 body 上，不受这条裁剪影响） */
+  overflow: hidden;
+
+  .toolBtn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    /* 不参与收缩：默认 flex-shrink:1 会在窗口变窄、这一排挤不下时把 32px 按钮连同里面的图标压扁。
+       flex:none 让每个按钮都保住自己的声明宽度，挤不下的整体被容器的 overflow 裁掉 */
+    flex: none;
+    width: 32px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: #555555;
+    cursor: pointer;
+
+    &:hover {
+      background: #e8ecf4;
+    }
+
+    &:disabled {
+      opacity: 0.35;
+      cursor: default;
+      background: transparent;
+    }
+
+    &.active {
+      color: #0069cc;
+    }
+
+    svg {
+      width: 16px;
+      height: 16px;
+      fill: currentColor;
+    }
+
+    .toolIcon {
+      /* 图标容器：图标 svg 由模块 ready() 注入（icon/*.svg?raw） */
+      display: flex;
+      align-items: center;
+      line-height: 1;
+    }
+
+    &.fontBtn {
+      /* 字体按钮：显示当前字体，可点开下拉。
+         唯二放开收缩的文字按钮：宽度跟着字体名走，挤不下时先由 .fontName 截成省略号，
+         收到 min-width 为止。想让它也完全不收缩，删掉下面这行即可 */
+      flex: 0 1 auto;
+      width: auto;
+      min-width: 96px;
+      gap: 4px;
+      padding: 0 8px;
+      justify-content: flex-start;
+      font-size: 12px;
+
+      .fontName {
+        flex: 1;
+        overflow: hidden;
+        text-align: left;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .caret {
+        width: 14px;
+        height: 14px;
+        flex: none;
+        opacity: 0.6;
+      }
+
+      &.sizeBtn {
+        /* 字号按钮：比字体按钮窄 */
+        min-width: 64px;
+      }
+    }
+
+    &.colorBtn {
+      /* 颜色按钮：隐藏的取色 input 铺满整个按钮，点击直接弹系统取色器 */
+      position: relative;
+
+      input[type="color"] {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        cursor: pointer;
+      }
+    }
+
+    /* 图标式下拉按钮（对齐、行高等共用）：显示当前图标，可点开下拉 */
+    &.alignBtn {
+      width: auto;
+      gap: 4px;
+      padding: 0 8px;
+      justify-content: flex-start;
+
+      .caret {
+        width: 14px;
+        height: 14px;
+        opacity: 0.6;
+      }
+    }
+  }
+
+  .divider {
+    flex: none;
+    width: 0;
+    height: 18px;
+    border-left: 1px solid #c8cdd6;
+  }
+}
+
+/* 下拉面板（展开时动态构建挂到 body，关闭即移除），非 #editorBar 后代 */
+.fontDropdown {
+  position: fixed;
+  min-width: 150px;
+  padding: 0px;
+  z-index: 1000;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+
+  /* 对齐下拉：只显示图标，面板自适应收窄 */
+  &.alignDropdown {
+    min-width: auto;
+    /* 与其他下拉一致：无容器内边距，项的 hover/选中背景横向贯通、顶部不留白 */
+    padding: 0;
+  }
+
+  .fontItem {
+    display: flex;
+    align-items: center;
+    height: 28px;
+    padding: 0 10px;
+    cursor: pointer;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+
+    &:hover {
+      background: #e8ecf4;
+    }
+
+    &.selected {
+      background: #d3e3fd;
+      color: #0069cc;
+    }
+  }
+
+  /* 对齐下拉项：只显示图标，说明在图标 title 上。
+     高度/内边距与 .fontItem 对齐：无圆角、无内部留白，hover 与选中背景横向贯通 */
+  .alignItem {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 28px;
+    padding: 0 10px;
+    cursor: pointer;
+
+    &:hover {
+      background: #e8ecf4;
+    }
+
+    &.selected {
+      background: #d3e3fd;
+      color: #0069cc;
+    }
+
+    .alignItemIcon {
+      display: flex;
+      align-items: center;
+      flex: none;
+      line-height: 1;
+
+      svg {
+        width: 16px;
+        height: 16px;
+        flex: none;
+        fill: currentColor;
+      }
+    }
+  }
+}
+
+/* 字号下拉：只放数字+px，整体更窄且条目居中 */
+.fontDropdown.sizeDropdown {
+  min-width: 80px;
+
+  .fontItem {
+    justify-content: center;
+  }
+}
+
+/* 行高下拉：只放倍数数字，整体更窄且条目居中 */
+.fontDropdown.lineHeightDropdown {
+  min-width: 80px;
+
+  .fontItem {
+    justify-content: center;
+  }
+}
+
+/* 链接编辑弹窗（展开时挂到 body）：输入框 + 取消/确定 */
+.linkDialog {
+  position: fixed;
+  z-index: 1001;
+  width: 280px;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  font-size: 13px;
+  color: #333;
+
+  /* 两个字段（地址 / 显示文本）之间的间距 */
+  .linkDialogField + .linkDialogField {
+    margin-top: 8px;
+  }
+
+  .linkDialogLabel {
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #666;
+  }
+
+  .linkDialogInput {
+    box-sizing: border-box;
+    width: 100%;
+    height: 28px;
+    padding: 0 8px;
+    border: 1px solid #c8cdd6;
+    outline: none;
+    font-size: 13px;
+
+    &:focus {
+      border-color: #0069cc;
+    }
+  }
+
+  .linkDialogBtns {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+
+    .linkDialogBtn {
+      height: 24px;
+      padding: 0 12px;
+      border: 1px solid #c8cdd6;
+      background: #fff;
+      color: #333;
+      font-size: 12px;
+      cursor: pointer;
+
+      &:hover {
+        background: #f2f3f5;
+      }
+    }
+
+    .linkDialogBtnPrimary {
+      border-color: #0069cc;
+      background: #0069cc;
+      color: #fff;
+
+      &:hover {
+        background: #0057b3;
+      }
+    }
+  }
+}

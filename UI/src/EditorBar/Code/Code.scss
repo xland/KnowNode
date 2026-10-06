@@ -1,0 +1,90 @@
+/* 代码块编辑弹窗（挂到 body，居中显示）。
+   比链接弹窗大得多：要能一次看几十行代码，所以宽与高都固定，代码框本身不可拖拽改大小。 */
+.codeDialog {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 1002;
+  width: 560px;
+  box-sizing: border-box;
+  padding: 12px;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+  font-size: 13px;
+  color: #333;
+
+  /* 头部：左边"代码"两个字，语言选择框靠右对齐 */
+  .codeDialogHead {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .codeDialogLabel {
+    font-size: 12px;
+    color: #666;
+  }
+
+  .codeDialogLang {
+    height: 26px;
+    padding: 0 6px;
+    border: 1px solid #c8cdd6;
+    background: #fff;
+    font-size: 12px;
+  }
+
+  .codeDialogInput {
+    box-sizing: border-box;
+    width: 100%;
+    height: 260px;
+    padding: 8px;
+    border: 1px solid #c8cdd6;
+    outline: none;
+    /* 代码框尺寸固定，不允许拖右下角改大小（拖出来的尺寸下一次打开不记住，只会把弹窗撑变形） */
+    resize: none;
+    /* 等宽 + 手动换行：代码里的缩进要看得出来 */
+    font-family: Consolas, "Courier New", monospace;
+    font-size: 12.5px;
+    line-height: 1.6;
+    white-space: pre;
+    overflow: auto;
+
+    &:focus {
+      border-color: #0069cc;
+    }
+  }
+
+  .codeDialogBtns {
+    display: flex;
+    justify-content: flex-end;
+    gap: 6px;
+    margin-top: 10px;
+
+    .codeDialogBtn {
+      height: 24px;
+      padding: 0 12px;
+      border: 1px solid #c8cdd6;
+      background: #fff;
+      color: #333;
+      font-size: 12px;
+      cursor: pointer;
+
+      &:hover {
+        background: #f2f3f5;
+      }
+    }
+
+    .codeDialogBtnPrimary {
+      border-color: #0069cc;
+      background: #0069cc;
+      color: #fff;
+
+      &:hover {
+        background: #0057b3;
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+#articleEditor {
+  flex: 1 1 auto;
+  min-width: 200px;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #ffffff;
+  /* 遮罩（EmptyMask）是绝对定位铺满本面板的，得先让自己成为定位父级 */
+  position: relative;
+}

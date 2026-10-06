@@ -1,0 +1,10 @@
+# 构建产物与依赖，不参与格式化
+dist
+node_modules
+
+# 由 iconfont 平台生成的图标资源：改动只应来自重新下载，格式化会制造无意义的 diff
+public/iconfont.css
+public/iconfont.woff2
+
+# 工具栏图标（EditorBar/icon/*.svg、assets 等）
+*.svg

@@ -1,0 +1,26 @@
+{
+  "name": "draftdepot",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build && node scripts/gen-dist-rc.mjs",
+    "preview": "vite preview",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.9.7",
+    "sass-embedded": "^1.104.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.2.2"
+  },
+  "dependencies": {
+    "roosterjs": "^9.59.0",
+    "roosterjs-content-model-api": "^9.59.0",
+    "roosterjs-content-model-core": "^9.59.0",
+    "roosterjs-content-model-dom": "^9.59.0",
+    "roosterjs-content-model-types": "^9.59.0",
+    "shiki": "^4.4.3"
+  }
+}

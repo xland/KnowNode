@@ -1,0 +1,7 @@
+<Solution>
+  <Configurations>
+    <Platform Name="x64" />
+    <Platform Name="x86" />
+  </Configurations>
+  <Project Path="KnowNode/KnowNode.vcxproj" Id="75a20275-40b4-4c1d-a1c5-3e5822714580" />
+</Solution>

@@ -1,0 +1,28 @@
+/*
+ * 列表被过滤空了（选中了没有文章的分类、或库里一篇都没有）时盖住整个编辑面板：
+ * 标题输入框、工具栏、正文此时都没有可编辑的对象，不该再被点到。
+ * 绝对定位铺满 #articleEditor（它是定位父级），默认隐藏，显隐由 EmptyMask.setVisible 控制。
+ */
+#emptyMask {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba($color: #55aaff, $alpha: 0.3);
+
+  #emptyMaskBtn {
+    padding: 16px 28px;
+    font-size: 16px;
+    color: #ffffff;
+    background: #0069cc;
+    border-radius: 4px;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  #emptyMaskBtn:hover {
+    background: #0057a8;
+  }
+}

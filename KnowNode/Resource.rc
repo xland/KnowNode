@@ -1,0 +1,53 @@
+#define APSTUDIO_READONLY_SYMBOLS
+#include "winres.h"
+#undef APSTUDIO_READONLY_SYMBOLS
+100 ICON "..\\Doc\\logo.ico"
+
+; 前端构建产物（UI/dist）：文件名带 hash，手改一次就得改一次，所以由 UI/scripts/gen-dist-rc.mjs
+; 每次 npm run build 直接重写下面标记之间的这一块，别手改。
+; 只有 Release 才嵌：Debug 走 vite 开发服务器，把这些再编进 exe 只是白白拖慢链接
+#ifndef _DEBUG
+; >>> dist
+assets/index.css RCDATA "..\\UI\\dist\\assets\\index.css"
+assets/index.js RCDATA "..\\UI\\dist\\assets\\index.js"
+iconfont.css RCDATA "..\\UI\\dist\\iconfont.css"
+iconfont.woff2 RCDATA "..\\UI\\dist\\iconfont.woff2"
+index.html RCDATA "..\\UI\\dist\\index.html"
+logo.ico RCDATA "..\\UI\\dist\\logo.ico"
+logo.svg RCDATA "..\\UI\\dist\\logo.svg"
+; <<< dist
+#endif
+
+
+VS_VERSION_INFO VERSIONINFO
+FILEVERSION 0, 0, 3, 0
+PRODUCTVERSION 0, 0, 3, 0
+FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+	FILEFLAGS 0x1L
+#else
+	FILEFLAGS 0x0L
+#endif
+FILEOS 0x40004L
+FILETYPE 0x1L
+FILESUBTYPE 0x0L
+BEGIN
+	BLOCK "StringFileInfo"
+	BEGIN
+		BLOCK "080404b0"
+		BEGIN
+			VALUE "CompanyName", "GitHub xland"
+			VALUE "FileDescription", "KnowNode"
+			VALUE "FileVersion", "0.0.3.0"
+			VALUE "InternalName", "KnowNode.exe"
+			VALUE "LegalCopyright", "Copyright (C) LiuXiaolun 2026"
+			VALUE "OriginalFilename", "KnowNode.exe"
+			VALUE "ProductName", "KnowNode"
+			VALUE "ProductVersion", "0.0.3.0"
+		END
+	END
+	BLOCK "VarFileInfo"
+	BEGIN
+		VALUE "Translation", 0x804, 1200
+	END
+END

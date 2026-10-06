@@ -1,0 +1,19 @@
+<!--
+  与 Link.html 同款：一次插入两个节点，按钮必须放在最后（CtrlBase.appendTo 取最后一个元素），
+  弹窗写在按钮之前，由 ready() 挪到 body 后只切换 hidden 显隐。
+-->
+<div class="codeDialog" hidden>
+  <div class="codeDialogHead">
+    <span class="codeDialogLabel">代码</span>
+    <select class="codeDialogLang"></select>
+  </div>
+  <textarea class="codeDialogInput" spellcheck="false" wrap="off" placeholder="粘贴或输入代码"></textarea>
+  <div class="codeDialogBtns">
+    <button type="button" class="codeDialogBtn">取消</button>
+    <button type="button" class="codeDialogBtn codeDialogBtnPrimary">确定</button>
+  </div>
+</div>
+
+<button class="toolBtn" title="插入代码块">
+  <span class="toolIcon"></span>
+</button>

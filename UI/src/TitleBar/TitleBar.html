@@ -1,0 +1,20 @@
+<div id="titleBar">
+  <div id="titleLabel">
+    <!-- 放在标题里而不是标题外：这样点 logo 的 mousedown 也能冒泡到 #titleLabel 的拖动（hittest） -->
+    <img id="titleLogo" src="/logo.svg" alt="" draggable="false" />稿仓
+  </div>
+  <div id="btnBox">
+    <div id="minimizeBtn" class="titleBtn">
+      <i class="icon icon-minimize"></i>
+    </div>
+    <div id="restoreBtn" class="titleBtn">
+      <i class="icon icon-restore"></i>
+    </div>
+    <div id="maximizeBtn" class="titleBtn" style="display: none">
+      <i class="icon icon-maximize"></i>
+    </div>
+    <div id="closeBtn" class="titleBtn">
+      <i class="icon icon-close"></i>
+    </div>
+  </div>
+</div>
