@@ -56,11 +56,11 @@ void Window::createWin()
     wcex.hCursor = LoadCursor(nullptr, IDC_ARROW);
     wcex.hbrBackground = (HBRUSH)COLOR_WINDOW;
     wcex.lpszMenuName = nullptr;
-    wcex.lpszClassName = L"DraftDepot";
+    wcex.lpszClassName = L"KnowNode";
     RegisterClassEx(&wcex);
     // 初始位置/大小统一由 defaultRect() 给（原来是写死的 200,300,1000,800）
     auto rect = defaultRect();
-    hwnd = CreateWindowEx(WS_EX_APPWINDOW, wcex.lpszClassName, wcex.lpszClassName, WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_POPUP, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, wcex.hInstance, nullptr);
+    hwnd = CreateWindowEx(WS_EX_APPWINDOW, wcex.lpszClassName, L"KnowNode - 知点", WS_MAXIMIZEBOX | WS_MINIMIZEBOX | WS_POPUP, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, wcex.hInstance, nullptr);
     SetWindowLongPtr(hwnd, GWLP_USERDATA, reinterpret_cast<LONG_PTR>(this));
     MARGINS margins = { 1, 1, 1, 1 };
     DwmExtendFrameIntoClientArea(hwnd, &margins);

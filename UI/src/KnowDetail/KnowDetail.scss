@@ -95,7 +95,22 @@
     }
   }
 
-  /* 富文本编辑区：吃掉标题行之外的全部高度，滚动交给 EditorContent 自己 */
+  /* 富文本工具栏（EditorBar）：不吃编辑区的高度，多高算多高 */
+  .knowDetailBar {
+    flex: none;
+
+    /* 详情面板比整页编辑器窄得多（默认 500px，最窄能拖到 300px），工具栏这二十多个按钮
+       一行摆不下。#editorBar 默认是 height:30px + overflow:hidden，直接照搬会把后面的按钮裁掉，
+       所以这里放开让它换行——多占一两行也比按钮消失好 */
+    #editorBar {
+      height: auto;
+      min-height: 30px;
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+  }
+
+  /* 富文本编辑区：吃掉标题行与工具栏之外的全部高度，滚动交给 EditorContent 自己 */
   .knowDetailEditor {
     flex: 1 1 auto;
     min-height: 0;

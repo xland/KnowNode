@@ -41,6 +41,10 @@ public:
     /// 执行一条不需要返回行的 SQL（建表、PRAGMA 等）；失败返回 false
     bool exec(const char* sql);
 
+    /// 建表 / 建索引这类一次性语句的统一入口：prepare + 执行，任一步失败就带 SQLite 的原因 fatal。
+    /// 各表类的 create() 一律走它，别自己拿 DbStmt 只判 ok()——那只代表 SQL 能编译，不代表执行过
+    static void execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what);
+
     /// 取最近一次错误的文本（UTF-8）
     std::string lastError() const;
 

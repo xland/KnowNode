@@ -33,6 +33,10 @@
 1. **`Db` 是真正的类、单例**（不再是 `namespace Db` 自由函数）。
 2. **建表由各表类自己注册**：`Db` 不硬编码任何建表 SQL，只负责在 `init()` 时执行已注册的建表动作。
 3. **每个表类都是单例类，对外接口全部是实例方法**（不提供静态 CRUD）。
+4. **建表语句必须走 `Db::execOrFatal(conn, sql, 失败提示)`，不要自己拿 `DbStmt` 只判 `ok()`**
+   （2026-10-06 实踩）：`DbStmt` 构造时只 `prepare`，`ok()` 只表示 SQL 能编译，**不代表执行过**。
+   只 prepare 不 step 的 `CREATE TABLE` 等于没建，紧接着引用该表的 `CREATE INDEX` 会在 prepare 阶段
+   报 `no such table`——表象是"创建 xxx 索引失败"，真因是表压根没建。
 
 ## 类结构草案（实现草案，待用户确认后落地）
 

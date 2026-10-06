@@ -50,6 +50,13 @@ KnowNode/
 - **数据库文件位置**：沿用现有实现 `Env::getDataPath() / db.db`（数据目录由 `Env::initDataPath` 创建）。
 - **前端产物加载**：Debug 连 vite 开发服务器 `http://localhost:5173`；Release 从 exe 资源应答
   `https://app.localhost/index.html`。
+- **构建顺序与两个坑**（2026-10-06 编译验证过）：
+  1. 先 `npm run build`——它会调 `UI/scripts/gen-dist-rc.mjs` 重写 `Resource.rc` 里的 dist 清单
+     （产物文件名带 hash，手改跟不上；dist 清单过时就会 RC2135 编译不过）。
+  2. 资源编译器**不继承** `ClCompile` 的 `/D_DEBUG`，所以 `Resource.rc` 的 `#ifndef _DEBUG`
+     要靠 vcxproj 里单独的 `<ResourceCompile><PreprocessorDefinitions>_DEBUG;...` 才成立
+     （已加在 Debug|x64）；否则 Debug 也去嵌 dist，dist 没构建就编译不过。
+  Debug / Release | x64 均已编译通过。
 
 ## 待确认问题
 - `packages/`、`x64/`、`KnowNode/` 中哪些是老项目残留、需要清理或重写。

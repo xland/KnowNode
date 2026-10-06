@@ -13,7 +13,6 @@ assets/index.js RCDATA "..\\UI\\dist\\assets\\index.js"
 iconfont.css RCDATA "..\\UI\\dist\\iconfont.css"
 iconfont.woff2 RCDATA "..\\UI\\dist\\iconfont.woff2"
 index.html RCDATA "..\\UI\\dist\\index.html"
-logo.ico RCDATA "..\\UI\\dist\\logo.ico"
 logo.svg RCDATA "..\\UI\\dist\\logo.svg"
 ; <<< dist
 #endif

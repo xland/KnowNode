@@ -34,6 +34,14 @@ public:
     bool step() { return sqlite3_step(stmt_) == SQLITE_ROW; }
     /// 只执行不需要结果的语句
     void run() { sqlite3_step(stmt_); }
+    /// 执行不需要结果的语句并检查有没有真的跑完（CREATE / INSERT / UPDATE / DELETE 都用它）。
+    /// ok() 只代表 prepare 成功——建表语句光 prepare 不 step 等于什么都没建，
+    /// 下一句引用该表的 CREATE INDEX 就会因 "no such table" 在 prepare 阶段失败
+    bool exec()
+    {
+        auto rc = sqlite3_step(stmt_);
+        return rc == SQLITE_DONE || rc == SQLITE_OK;
+    }
 
     sqlite3_int64 columnInt(int col) const { return sqlite3_column_int64(stmt_, col); }
     double columnDouble(int col) const { return sqlite3_column_double(stmt_, col); }

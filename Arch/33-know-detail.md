@@ -3,6 +3,13 @@
 代码位置：`UI/src/KnowDetail/`。
 富文本编辑能力复用 **roosterjs**：`UI/src/EditorBar/`（工具条）+ `UI/src/EditorContent/`（编辑区）。
 
+> **工具栏已接上（2026-10-06）**：`KnowDetail.ready()` 里 `EditorBar.appendTo(".knowDetailBar")` 排在
+> `EditorContent.appendTo(...)` **之前**——编辑区 `new Editor()` 的那一刻就广播第一帧 `editorState`，
+> 按钮的启用/点亮态全靠它；挂晚了会错过这帧，撤销/重做/移除链接会一直保持初始置灰，
+> 直到用户敲一次键盘才有反应。
+> 详情面板比整页编辑器窄（默认 500px，最窄能拖到 300px），所以 `#editorBar` 在面板里放开成
+> **可换行**：照搬默认的 `height:30px + overflow:hidden` 会把后面那十几个按钮直接裁掉。
+
 ## 面板内容：由点击对象决定
 
 `KnowDetail` 是**同一个面板**，根据用户在 `KnowNet` 上点击的对象显示不同内容：
@@ -73,4 +80,4 @@
   老项目的 `image.resize`、`Page::handleResizeImage`、`ImageResizePlugin` 因此删除。
 - **老 `image` 表保留**：记录正文引用了哪些图片（缩放时改指向、判断有无别处引用），逻辑不变。
 - **保留的前端代码**：`UI/src/ImageStore.ts`、`UI/src/EditorContent/ImagePlugin.ts`、
-  `UI/src/EditorContent/ImageResize.ts`、`UI/src/EditorBar/Image/`。
+  `UI/src/EditorBar/Image/`（`ImageResize.ts` 已删，见上面的缩放）。

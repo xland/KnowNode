@@ -33,13 +33,10 @@ void KnowLine::create(sqlite3* conn)
         "    CHECK (node_a_id < node_b_id),"
         "    UNIQUE (node_a_id, node_b_id)"
         ");";
-    if (!DbStmt{ conn, sql }.ok())
-        Db::fatal(L"创建 know_line 表失败");
+    Db::execOrFatal(conn, sql, L"创建 know_line 表失败");
 
-    const char* indexA = "CREATE INDEX IF NOT EXISTS idx_line_a ON know_line(node_a_id);";
-    const char* indexB = "CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);";
-    if (!DbStmt{ conn, indexA }.ok() || !DbStmt{ conn, indexB }.ok())
-        Db::fatal(L"创建 know_line 索引失败");
+    Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_a ON know_line(node_a_id);", L"创建 know_line 索引 idx_line_a 失败");
+    Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);", L"创建 know_line 索引 idx_line_b 失败");
 }
 
 int64_t KnowLine::add(int64_t nodeAId, int64_t nodeBId)

@@ -2,8 +2,23 @@
   <div class="knowNetCanvas"></div>
   <!-- 双击节点时就地改标题用的输入框：平时藏着，改的时候按节点位置与当前缩放盖上去 -->
   <input class="knowNetTitleEdit" type="text" />
-  <!-- 右上角工具按钮：这一版先放「展示全部」，「一键整理布局」等布局算法落地后再补 -->
+  <!-- 右上角工具按钮 -->
   <div class="knowNetTools">
     <span class="icon icon-search" id="knowNetFit" title="展示全部"></span>
+    <!-- 一键整理：图标字体里没有合适的，用内联 svg（点阵 + 连线 = 关系图） -->
+    <span class="icon" id="knowNetTidy" title="一键整理布局">
+      <svg viewBox="0 0 16 16" width="15" height="15" aria-hidden="true">
+        <g fill="none" stroke="currentColor" stroke-width="1.3">
+          <path d="M4 4.5 L8 8 L12 4" />
+          <path d="M8 8 L12 12" />
+        </g>
+        <g fill="currentColor">
+          <circle cx="3.5" cy="4.5" r="2" />
+          <circle cx="8" cy="8" r="2" />
+          <circle cx="12.5" cy="3.5" r="2" />
+          <circle cx="12.5" cy="12" r="2" />
+        </g>
+      </svg>
+    </span>
   </div>
 </div>

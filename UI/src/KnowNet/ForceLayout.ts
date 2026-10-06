@@ -5,10 +5,13 @@
  * 不像 d3-force 那样持续演化。因此没有 alpha / reheat / 逐帧推进那一套，
  * 收敛判据就是"迭代次数跑完"。
  *
- * 算法是 Fruchterman-Reingold 的变体，改了两处：
- * - 斥力用**两个节点表面之间的距离**（中心距减去各自的外接圆半径）而不是中心距，
- *   节点越大越难被挤到一起，矩形尺寸的差别也就体现得出来；
- * - 加了一个很弱的**向心力**把整张图拉回原点，免得互不连通的那几块各自飘走。
+ * 算法是 Fruchterman-Reingold 的变体，改了三处：
+ * - 斥力按**两个节点表面之间的距离**算，而不是中心距：节点越大越难被挤到一起；
+ *   表面距离把矩形近似成同尺寸的**椭圆**（水平方向量到半宽、垂直方向量到半高）——
+ *   直接取外接圆的话，220×36 这种扁节点会被当成直径 220 的圆，白占一大片地方；
+ * - 加了一个很弱的**向心力**把整张图拉回原点，免得互不连通的那几块各自飘走；
+ * - 算完把**质心挪到原点**：画布的约定是"视口中心对准画布原点"（Arch/32），
+ *   只靠向心力挡不住整体漂移，不归位的话下次打开这张网就看不见了。
  *
  * 权重已删除（Arch/32），所以每条边的弹簧长度都一样：`IDEAL_DISTANCE`。
  */
@@ -17,8 +20,9 @@ export interface LayoutNode {
   id: number;
   x: number;
   y: number;
-  /** 节点的外接圆半径（由矩形宽高算出）：斥力按它算，防重叠 */
-  radius: number;
+  /** 节点的半宽 / 半高：斥力按它们算，避免矩形叠在一起 */
+  halfWidth: number;
+  halfHeight: number;
 }
 
 export interface LayoutLine {
@@ -32,10 +36,10 @@ const IDEAL_DISTANCE = 180;
 const ITERATIONS = 300;
 /** 初始位移上限（温度）：每步最多挪这么远，随迭代线性衰减，最后几步只做微调 */
 const TEMPERATURE = 60;
-/** 斥力里两个节点之间至少留出的空隙（在半径之和以外再留这么多） */
-const PADDING = 24;
-/** 向心力：只防飘散，不主导布局 */
-const GRAVITY = 0.02;
+/** 斥力里两个节点之间至少留出的空隙（在表面之外再留这么多） */
+const PADDING = 40;
+/** 向心力：只防飘散（尤其是没连线的孤立节点），不主导布局 */
+const GRAVITY = 0.04;
 
 /**
  * 算出力导向平衡后的坐标，返回「节点 id → 新坐标」。
@@ -44,7 +48,8 @@ const GRAVITY = 0.02;
 export function forceLayout(nodes: LayoutNode[], lines: LayoutLine[]): Map<number, { x: number; y: number }> {
   const count = nodes.length;
   const pos = nodes.map((node) => ({ x: node.x, y: node.y }));
-  const radius = nodes.map((node) => node.radius);
+  const halfWidth = nodes.map((node) => node.halfWidth);
+  const halfHeight = nodes.map((node) => node.halfHeight);
 
   const indexOf = new Map<number, number>();
   nodes.forEach((node, i) => indexOf.set(node.id, i));
@@ -76,11 +81,14 @@ export function forceLayout(nodes: LayoutNode[], lines: LayoutLine[]): Map<numbe
           vy = ((i * 13 + j * 29) % 7) - 3;
           distance = Math.hypot(vx, vy) || 1;
         }
-        // 表面之间还剩多少空隙：贴上了（gap 很小）斥力就猛涨，把两个节点推开
-        const gap = Math.max(distance - radius[i] - radius[j] - PADDING, 1);
-        const force = (IDEAL_DISTANCE * IDEAL_DISTANCE) / (gap * gap);
         const ux = vx / distance;
         const uy = vy / distance;
+        // 表面之间还剩多少空隙：贴上了（gap 很小）斥力就猛涨，把两个节点推开
+        const gap = Math.max(
+          distance - ellipseRadius(ux, uy, halfWidth[i], halfHeight[i]) - ellipseRadius(ux, uy, halfWidth[j], halfHeight[j]) - PADDING,
+          1,
+        );
+        const force = (IDEAL_DISTANCE * IDEAL_DISTANCE) / (gap * gap);
         dx[i] += ux * force;
         dy[i] += uy * force;
         dx[j] -= ux * force;
@@ -115,7 +123,19 @@ export function forceLayout(nodes: LayoutNode[], lines: LayoutLine[]): Map<numbe
     }
   }
 
+  // 质心归位：让整张图的中心落在画布原点上（见文件头的说明）
+  const centerX = pos.reduce((sum, p) => sum + p.x, 0) / count;
+  const centerY = pos.reduce((sum, p) => sum + p.y, 0) / count;
+
   const result = new Map<number, { x: number; y: number }>();
-  nodes.forEach((node, i) => result.set(node.id, { x: pos[i].x, y: pos[i].y }));
+  nodes.forEach((node, i) => result.set(node.id, { x: pos[i].x - centerX, y: pos[i].y - centerY }));
   return result;
+}
+
+/**
+ * 与节点矩形同宽高的椭圆，在 (ux, uy) 这个方向上的半径：
+ * 正对着看是半宽、竖着看是半高，斜着取中间值。
+ */
+function ellipseRadius(ux: number, uy: number, halfWidth: number, halfHeight: number): number {
+  return 1 / Math.hypot(ux / halfWidth, uy / halfHeight);
 }

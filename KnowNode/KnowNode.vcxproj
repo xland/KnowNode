@@ -115,6 +115,12 @@
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <AdditionalOptions>/utf-8 %(AdditionalOptions)</AdditionalOptions>
     </ClCompile>
+    <!-- 资源编译器不继承 ClCompile 的 /D_DEBUG：不加这一条，Resource.rc 里的
+         #ifndef _DEBUG 在 Debug 下也成立，于是 Debug 也去嵌 UI/dist 的产物
+         （dist 还没构建、或清单过时就会直接 RC2135 编译不过）。见脚本注释：只有 Release 才嵌 -->
+    <ResourceCompile>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ResourceCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>

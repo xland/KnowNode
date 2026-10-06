@@ -253,7 +253,8 @@ HRESULT Page::onMsgReceived(ICoreWebView2* webview, ICoreWebView2WebMessageRecei
     auto method = param.GetNamedString(L"method");
     JsonObject result;
     result.SetNamedValue(L"id", JsonValue::CreateStringValue(param.GetNamedString(L"id")));
-    auto args = Util::msgArgs(param);
+    // 别叫 args：本函数的形参就叫 args，同名变量在函数体里属于重定义（C2082）
+    auto params = Util::msgArgs(param);
     std::wstring methodStr{ method.c_str() };
 
     // method → handler 注册表分发（命名与清单见 Arch/21-ipc.md）
@@ -264,7 +265,7 @@ HRESULT Page::onMsgReceived(ICoreWebView2* webview, ICoreWebView2WebMessageRecei
         if (it != table.end())
         {
             // 返回 true = handler 自己已经发过回包（image.dir 要随包附带目录句柄）
-            if (it->second(this, args, result)) return S_OK;
+            if (it->second(this, params, result)) return S_OK;
         }
         else
         {

@@ -27,8 +27,7 @@ void Setting::create(sqlite3* conn)
         "    created_at INTEGER NOT NULL,"
         "    updated_at INTEGER NOT NULL"
         ");";
-    if (!DbStmt{ conn, sql }.ok())
-        Db::fatal(L"创建 setting 表失败");
+    Db::execOrFatal(conn, sql, L"创建 setting 表失败");
 }
 
 std::string Setting::get(const std::string& key, const std::string& fallback) const

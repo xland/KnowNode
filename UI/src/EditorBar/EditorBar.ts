@@ -53,7 +53,8 @@ const GROUPS: CtrlBase[][] = [
 
 /**
  * 编辑器工具栏（模块单例）。
- * 根元素 #editorBar 由 ArticleEditor 挂到标题栏之后。
+ * 根元素 #editorBar 由 KnowDetail 挂在**标题行之后、编辑区之前**（Arch/33）——
+ * 顺序不能反：编辑区 new Editor() 时会立刻广播第一帧 editorState，工具栏得先注册好监听才收得到。
  */
 class EditorBar extends CtrlBase {
   constructor() {

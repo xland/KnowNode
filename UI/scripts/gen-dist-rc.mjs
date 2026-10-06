@@ -47,7 +47,7 @@ if (!existsSync(distDir) || !existsSync(join(distDir, "index.html"))) {
   for (const file of files) {
     // 资源名 = 相对 dist 的路径（正斜杠），与 URL 里 https://app.localhost/ 后面那一截一致
     const name = relative(distDir, file).split("\\").join("/");
-    // 文件路径相对 DraftDepot 目录（rc.exe 在那里编译 Resource.rc）。
+    // 文件路径相对 KnowNode 目录（rc.exe 在那里编译 Resource.rc）。
     // 反斜杠在 rc 里是转义符（\a 会被吃掉），所以要写成双反斜杠
     const path = relative(fileURLToPath(new URL("../../DraftDepot", import.meta.url)), file)
       .split("\\")

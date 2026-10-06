@@ -1,6 +1,7 @@
 #include "Db.h"
 #include "DbStmt.h"
 #include "../Env.h"
+#include "../Util.h"
 
 Db& Db::instance()
 {
@@ -39,6 +40,19 @@ void Db::registerTable(std::string name, std::function<void(sqlite3*)> create)
 bool Db::exec(const char* sql)
 {
     return sqlite3_exec(conn_, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
+}
+
+void Db::execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what)
+{
+    DbStmt stmt{ conn, sql };
+    if (!stmt.ok() || !stmt.exec())
+    {
+        // 静态函数里拿不到 instance()，直接问连接要原因
+        auto reason = sqlite3_errmsg(conn);
+        auto detail = what + L"\n\n" + Util::convertToWStr(reason ? reason : "")
+            + L"\n\nSQL：" + Util::convertToWStr(sql);
+        fatal(detail);
+    }
 }
 
 std::string Db::lastError() const

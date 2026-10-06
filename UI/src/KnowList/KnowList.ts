@@ -43,7 +43,16 @@ class KnowList extends CtrlBase {
 
   override ready(): void {
     this.list = this.dom.querySelector<HTMLElement>(".knowListContent")!;
-    this.dom.querySelector<HTMLElement>("#knowListAdd")!.addEventListener("click", () => void this.create());
+    const addBtn = this.dom.querySelector<HTMLElement>("#knowListAdd")!;
+    addBtn.addEventListener("click", () => {
+      // 浮层正贴在这个按钮下面：再点一次 = 收起
+      // （Dialog 的"点外面就收"故意放过了锚点本身，交给这里判断，免得收了又立刻弹开）
+      if (Dialog.isOpen()) {
+        Dialog.dismiss();
+        return;
+      }
+      void this.create(addBtn);
+    });
     // 整个列表只挂一个右键监听，命中哪一行事后按 e.target 反查
     this.list.addEventListener("contextmenu", (e) => this.onContextMenu(e));
     void this.loadAndRender();
@@ -96,12 +105,14 @@ class KnowList extends CtrlBase {
     await KnowNet.open(id);
   }
 
-  /** 右上角加号：弹对话框要名字，建好之后插到列表末尾并选中它 */
-  private async create(): Promise<void> {
+  /**
+   * 右上角加号：在它下面浮出一个小输入框（不要遮罩，见 Dialog 的锚定形态），
+   * 填好名字建库，然后插到列表末尾并选中它。
+   */
+  private async create(anchor: HTMLElement): Promise<void> {
     const name = await Dialog.prompt({
-      title: "新建知识",
-      label: "知识名称",
-      placeholder: "例如：历史知识",
+      anchor,
+      placeholder: "知识名称",
       maxLength: NAME_MAX_LENGTH,
     });
     if (!name) return; // 取消或空名字：什么都不做

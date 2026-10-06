@@ -28,8 +28,7 @@ void KnowList::create(sqlite3* conn)
         "    created_at INTEGER NOT NULL,"
         "    updated_at INTEGER NOT NULL"
         ");";
-    if (!DbStmt{ conn, sql }.ok())
-        Db::fatal(L"创建 know_list 表失败");
+    Db::execOrFatal(conn, sql, L"创建 know_list 表失败");
 }
 
 int64_t KnowList::add(const std::string& name)

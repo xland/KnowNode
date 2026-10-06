@@ -58,7 +58,7 @@ const TIDY_DURATION = 400;
  * 坐标约定：节点的 (x, y) 是**矩形中心**。这样新建知识的第一个节点取 (0, 0)、
  * 打开知识时把视口中心对到 (0, 0)，"画布中心 = 视口中心"就自然成立（见 Arch/32）。
  *
- * 已做到：加载并渲染节点与贝塞尔连线、拖拽移动并入库、单击选中（通知 KnowDetail 与 StatusBar）、
+ * 已做到：加载并渲染节点与连线、拖拽移动并入库、单击选中（通知 KnowDetail 与 StatusBar）、
  * 空白处点击取消选中、滚轮缩放、空白处拖拽平移、右上角「展示全部」、
  * 双击就地改标题、选中节点右侧「+」按钮与 Tab 新建关联节点。
  * 拖拽连线、右键菜单、点连线打开详情、一键整理布局见下一版。
@@ -146,6 +146,7 @@ class KnowNet extends CtrlBase {
     });
 
     this.dom.querySelector<HTMLElement>("#knowNetFit")!.addEventListener("click", () => this.fit());
+    this.dom.querySelector<HTMLElement>("#knowNetTidy")!.addEventListener("click", () => void this.tidy());
 
     // 标题输入框：回车 / 失焦 = 提交，Esc = 放弃。按键不外传，免得画布的 Tab 快捷键收到
     this.titleEditor.addEventListener("keydown", (e) => {
@@ -240,13 +241,13 @@ class KnowNet extends CtrlBase {
     }
   }
 
-  /** 连线的路径：三次贝塞尔，控制点按两点的相对位置取（水平方向拉开，曲线更柔和） */
+  /**
+   * 连线的路径：两个节点中心之间的**直线**（2026-10-06 由贝塞尔改回直线——曲线不好看）。
+   * 端点取中心而不是边缘：节点矩形画在连线的上层，盖住的那一段正好让线看起来从边缘出来，
+   * 也省得按节点宽高去算交点（标题一改宽度就变）。
+   */
   private linePath(a: { x: number; y: number }, b: { x: number; y: number }): string {
-    const dx = b.x - a.x;
-    const offset = Math.max(40, Math.abs(dx) * 0.5);
-    const c1x = a.x + (dx >= 0 ? offset : -offset);
-    const c2x = b.x - (dx >= 0 ? offset : -offset);
-    return `M ${a.x} ${a.y} C ${c1x} ${a.y}, ${c2x} ${b.y}, ${b.x} ${b.y}`;
+    return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
   }
 
   /**
@@ -338,6 +339,14 @@ class KnowNet extends CtrlBase {
       // 兜底：拉线的这一下要是被 Konva 认成了拖拽，立刻停掉（此刻位置还没变）
       if (this.linking) group.stopDrag();
     });
+    // 拖拽过程中就按实时位置重画连线，线跟着节点走（松手才改变会显得"线断了"）。
+    // 节点坐标与写库仍留到 dragend：拖动中每动一下都写一次库没有意义
+    group.on("dragmove", () => {
+      if (this.linking) return; // 拉线：这一下"拖拽"不算数
+      node.x = group.x();
+      node.y = group.y();
+      this.updateLines();
+    });
     group.on("dragend", () => {
       if (this.linking) return; // 拉线：这一下"拖拽"不算数，别写库
       node.x = group.x();
@@ -346,6 +355,21 @@ class KnowNet extends CtrlBase {
       this.redrawLines();
     });
     return group;
+  }
+
+  /**
+   * 只把已有连线挪到新路径上，**不重建形状**：拖拽、力导向动画这种每帧都要走的场合用它。
+   * redrawLines 会销毁并新建所有 Path（连带重建事件与选中态），每帧来一遍是白费。
+   */
+  private updateLines(): void {
+    for (const line of this.lines) {
+      const shape = this.lineShapes.get(line.id);
+      if (!shape) continue;
+      const a = this.nodes.find((n) => n.id === line.nodeAId);
+      const b = this.nodes.find((n) => n.id === line.nodeBId);
+      if (!a || !b) continue;
+      shape.data(this.linePath(a, b));
+    }
   }
 
   /**
@@ -683,7 +707,9 @@ class KnowNet extends CtrlBase {
 
     const input = this.titleEditor;
     input.value = node.title;
-    input.style.display = "";
+    // 必须显式写 "block"：CSS 里 .knowNetTitleEdit 就是 display:none，
+    // 设成 "" 只是清掉内联样式、回落到样式表的 none——输入框不显示，focus() 对不可见元素也无效
+    input.style.display = "block";
     input.style.left = `${pos.x - width / 2}px`;
     input.style.top = `${pos.y - height / 2}px`;
     input.style.width = `${width}px`;
@@ -748,14 +774,20 @@ class KnowNet extends CtrlBase {
     this.stage.position({ x: this.stage.width() / 2, y: this.stage.height() / 2 });
   }
 
-  /**
-   * 「展示全部」：按所有节点的包围盒算缩放比（留一点边距）并居中。
-   * 一个节点都没有时退回 centerOrigin。
-   */
+  /** 「展示全部」：按当前所有节点的包围盒算缩放并居中 */
   private fit(): void {
-    if (!this.stage || !this.nodes.length) return void this.centerOrigin();
-    const xs = this.nodes.map((n) => n.x);
-    const ys = this.nodes.map((n) => n.y);
+    this.fitPoints(this.nodes.map((n) => ({ x: n.x, y: n.y })));
+  }
+
+  /**
+   * 按给定的这组点算包围盒、缩放并居中。整理布局时传的是**整理后的目标坐标**：
+   * 终点已知，视口可以先对准，不必等节点滑到位再看。
+   * 一个点都没有时退回 centerOrigin。
+   */
+  private fitPoints(points: { x: number; y: number }[]): void {
+    if (!this.stage || !points.length) return void this.centerOrigin();
+    const xs = points.map((p) => p.x);
+    const ys = points.map((p) => p.y);
     const minX = Math.min(...xs) - NODE_MAX_WIDTH / 2;
     const maxX = Math.max(...xs) + NODE_MAX_WIDTH / 2;
     const minY = Math.min(...ys) - NODE_HEIGHT / 2;
@@ -774,6 +806,61 @@ class KnowNet extends CtrlBase {
       x: this.stage.width() / 2 - ((minX + maxX) / 2) * clamped,
       y: this.stage.height() / 2 - ((minY + maxY) / 2) * clamped,
     });
+  }
+
+  /**
+   * 「一键整理」：算一遍力导向，把节点平滑挪到新位置，落定后写库，视口对准整理后的包围盒。
+   * 从**当前坐标**出发算，所以是"把用户摆过的图重新理一理"，不是另起一个随机布局。
+   */
+  private async tidy(): Promise<void> {
+    if (!this.stage || this.nodes.length < 2) return; // 一个节点没什么可整理的
+    this.endTitleEdit(true); // 节点要动了，正在改的标题先落库
+    const target = forceLayout(
+      this.nodes.map((node) => ({ id: node.id, x: node.x, y: node.y, ...this.halfSizeOf(node.id) })),
+      this.lines,
+    );
+    this.fitPoints([...target.values()]);
+    await this.animateTo(target);
+    // 落定之后才写库：动画期间每帧都写没有意义（一次 node.move 一个节点）
+    for (const node of this.nodes) void Msg.invoke("node.move", { id: node.id, x: node.x, y: node.y });
+  }
+
+  /**
+   * 把节点平滑挪到新坐标（Arch/32：禁止瞬间跳变）。动画期间只改画布上的位置与本地数据，
+   * 写库由调用方在落定后统一做。
+   */
+  private animateTo(target: Map<number, { x: number; y: number }>): Promise<void> {
+    return new Promise((resolve) => {
+      const from = this.nodes.map((node) => ({ id: node.id, x: node.x, y: node.y }));
+      const start = performance.now();
+      const step = (now: number): void => {
+        const progress = Math.min(1, (now - start) / TIDY_DURATION);
+        const eased = 1 - Math.pow(1 - progress, 3); // 缓出：先快后慢，停得不突兀
+        for (const item of from) {
+          const to = target.get(item.id);
+          if (!to) continue;
+          const x = item.x + (to.x - item.x) * eased;
+          const y = item.y + (to.y - item.y) * eased;
+          const node = this.nodes.find((n) => n.id === item.id);
+          if (node) {
+            node.x = x;
+            node.y = y;
+          }
+          this.groups.get(item.id)?.position({ x, y });
+        }
+        this.updateLines(); // 每帧只改路径，不重建形状
+        if (progress < 1) requestAnimationFrame(step);
+        else resolve();
+      };
+      requestAnimationFrame(step);
+    });
+  }
+
+  /** 节点的半宽 / 半高：力导向按它们算斥力，尺寸大的节点更"占地"，不会被挤到别的节点身上 */
+  private halfSizeOf(id: number): { halfWidth: number; halfHeight: number } {
+    const rect = this.groups.get(id)?.findOne<Konva.Rect>("Rect");
+    const width = rect?.width() ?? NODE_MIN_WIDTH;
+    return { halfWidth: width / 2, halfHeight: NODE_HEIGHT / 2 };
   }
 
   /** 滚轮缩放：以 anchor（视口内坐标）为锚点，它下面的画布点缩放前后位置不变 */

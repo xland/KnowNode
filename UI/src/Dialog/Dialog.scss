@@ -90,4 +90,20 @@
       color: #fff;
     }
   }
+
+  /* 锚定形态（prompt 传了 anchor）：没有遮罩，浮层按屏幕坐标定位（坐标由 JS 算，见 placeUnder）。
+     覆盖层本身要 pointer-events: none——它虽然透明，不然仍会拦着下层的点击 */
+  &.show.anchored {
+    display: block;
+    background: none;
+    pointer-events: none;
+
+    .dialog {
+      position: absolute;
+      width: 240px;
+      border: 1px solid #e5e6eb;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.16);
+      pointer-events: auto;
+    }
+  }
 }

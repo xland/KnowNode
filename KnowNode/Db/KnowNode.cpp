@@ -32,12 +32,8 @@ void KnowNode::create(sqlite3* conn)
         "    created_at INTEGER NOT NULL,"
         "    updated_at INTEGER NOT NULL"
         ");";
-    if (!DbStmt{ conn, sql }.ok())
-        Db::fatal(L"创建 know_node 表失败");
-
-    const char* index = "CREATE INDEX IF NOT EXISTS idx_node_list ON know_node(list_id);";
-    if (!DbStmt{ conn, index }.ok())
-        Db::fatal(L"创建 know_node 索引失败");
+    Db::execOrFatal(conn, sql, L"创建 know_node 表失败");
+    Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_node_list ON know_node(list_id);", L"创建 know_node 索引失败");
 }
 
 int64_t KnowNode::add(int64_t listId, double x, double y, const std::string& title)

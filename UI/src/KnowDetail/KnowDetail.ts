@@ -3,6 +3,7 @@ import html from "./KnowDetail.html?raw";
 import CtrlBase from "../CtrlBase";
 import Msg from "../Msg";
 import EditorContent from "../EditorContent/EditorContent";
+import EditorBar from "../EditorBar/EditorBar";
 import KnowNet from "../KnowNet/KnowNet";
 
 /** 详情面板当前挂在谁身上：节点（标题 + 详情）或连线（只有详情） */
@@ -44,6 +45,10 @@ class KnowDetail extends CtrlBase {
   }
 
   override ready(): void {
+    // 工具栏必须**先**挂：EditorPlugin 在 new Editor() 的那一刻就广播第一帧 editorState，
+    // 按钮的启用/点亮态全靠它。挂晚了会错过这帧，撤销/重做/移除链接会一直保持初始置灰，
+    // 直到用户敲一次键盘才有反应
+    EditorBar.appendTo(this.dom.querySelector<HTMLElement>(".knowDetailBar")!);
     EditorContent.appendTo(this.dom.querySelector<HTMLElement>(".knowDetailEditor")!);
     this.titleInput.addEventListener("input", () => this.onTitleInput());
     this.dom.querySelector<HTMLElement>("#knowDetailPin")!.addEventListener("click", () => void this.togglePin());
