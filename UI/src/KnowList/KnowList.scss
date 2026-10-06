@@ -1,0 +1,68 @@
+/* 左侧知识列表面板（Arch/34）。纵向两截：顶部标题栏占固定高度，
+   下面 .knowListContent 吃掉剩余高度并负责滚动——列表超出这块才出滚动条，
+   标题栏永远在最上面不动（min-height: 0 是 flex 子项能正确滚动的前提）。 */
+#knowList {
+  width: 300px;
+  min-width: 300px;
+  flex-shrink: 0;
+  background: #fafafa;
+  border-right: 1px solid #e5e6eb;
+  user-select: none;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+
+  .knowListHeader {
+    flex: none;
+    height: 34px;
+    padding: 0 10px 0 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 13px;
+    color: #1f2329;
+  }
+
+  /* 新建按钮：iconfont 图标，鼠标悬停时变蓝 */
+  #knowListAdd {
+    font-size: 16px;
+    color: #6b7280;
+    cursor: pointer;
+    line-height: 1;
+
+    &:hover {
+      color: #1677ff;
+    }
+  }
+
+  .knowListContent {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 4px 0;
+  }
+
+  /* 一行一个知识：名称过长省略，悬停看全文 */
+  .knowItem {
+    height: 28px;
+    padding: 0 12px;
+    display: flex;
+    align-items: center;
+    font-size: 13px;
+    color: #1f2329;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    &:hover {
+      background: #e8ecf4;
+    }
+
+    &.selected {
+      background: #d3e3fd;
+      color: #0056b3;
+    }
+  }
+}

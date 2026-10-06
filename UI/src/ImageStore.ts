@@ -15,7 +15,7 @@ let imageDir: FileSystemDirectoryHandle | null = null;
  */
 async function getImageDir(): Promise<FileSystemDirectoryHandle> {
   if (imageDir) return imageDir;
-  const { objects } = await Msg.invokeWithObjects("getImageDir");
+  const { objects } = await Msg.invokeWithObjects("image.dir");
   const dir = objects[0];
   // 鸭子类型而不是 instanceof：句柄是原生注入的，认它有没有目录句柄的方法更稳
   if (!dir || typeof dir.getFileHandle !== "function") {
@@ -58,37 +58,10 @@ export async function saveImage(blob: Blob, ext: string): Promise<string> {
 }
 
 /**
- * 缩放产物：原主名 + @宽x高 + 原扩展名（img_x.png 拖成 600x400 → img_x@600x400.png），
- * 由原生另存（见 Page::handleResizeImage）。名字是确定性的，同一个尺寸拖多少次都只有一份。
- * 后缀里认得出原图是谁，所以放大时是拿原图重新生成，不会在缩略图上越放越糊
+ * 图片没有"缩放产物"这一说：用户拖拽改的只是 img 的显示尺寸（style 上的 width/height），
+ * 原生不再按新尺寸另存一份图，正文从头到尾引用落盘时的那一份原图。
+ * 老项目的 image.resize 与 ImageResizePlugin 因此删除（图片只落盘一次，目录里不攒缩放件）。
  */
-const RESIZED_SUFFIX = /@\d+x\d+(\.[^.]+)$/;
-
-/** 去掉缩放后缀，还原出原图的文件名（本身不是缩放产物的原样返回） */
-export function originNameOf(name: string): string {
-  return name.replace(RESIZED_SUFFIX, "$1");
-}
-
-/**
- * 让原生把图片目录里这张图按新的宽高另存一份，返回新文件名。
- * 原图不动。oldName 是正文里当前引用的那份（可能是原图，也可能是上一次拖出来的）：
- * 原生据此把库里指向它的记录改指到新的一份（正文改了但要等下次入库，记录是滞后的），
- * 然后把这张原图早先拖出来的其它尺寸一并清掉——它扫目录认"原主名@…"，不靠前端报，
- * 连着拖几下时前端报不全；还有别的文章在引用的那份它留着，免得删出裂图。
- * 于是目录里只剩"原图 + 最后拖出来的这一份"，不会每拖一个尺寸就攒一份。
- * 原生处理不了这个格式（或读写失败）时给空串：调用方继续用原图，等于没这回事。
- */
-export async function resizeImage(
-  name: string,
-  width: number,
-  height: number,
-  oldName: string,
-): Promise<string> {
-  const res = (await Msg.invoke("resizeImage", { name, width, height, oldName })) as {
-    name?: string;
-  } | null;
-  return res?.name ?? "";
-}
 
 /**
  * 正文里的图一律以 https://app.localhost/images/<文件名> 的形态入库与传递：

@@ -7,12 +7,10 @@ import { extractCodeBlocks, fillCodeBlocks, findCodeBlock, stripCodeBlocks } fro
 import { EditPlugin, HyperlinkPlugin, ImageEditPlugin, PastePlugin, ShortcutPlugin, WatermarkPlugin } from "roosterjs";
 import EditorPlugin from "./EditorPlugin";
 import ImagePlugin from "./ImagePlugin";
-import ImageResizePlugin from "./ImageResize";
 
 class EditorContent extends CtrlBase {
   editor: Editor | null = null;
   private imagePlugin = new ImagePlugin();
-  private imageResizePlugin = new ImageResizePlugin();
 
   constructor() {
     super(html);
@@ -35,8 +33,6 @@ class EditorContent extends CtrlBase {
         new ShortcutPlugin(),
         // 粘贴/拖放进来的内联图片（base64）落盘换持久 URL
         this.imagePlugin,
-        // 图片被拖着改过尺寸后，按新尺寸另存一份（原图留着），正文改引那一份
-        this.imageResizePlugin,
         new EditorPlugin(),
       ],
       // 不设 defaultSegmentFormat：默认字体/字号/颜色交给 #editorContent 的 CSS（见 EditorContent.scss）。

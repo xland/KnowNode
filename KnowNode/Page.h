@@ -17,6 +17,9 @@ public:
 	void emit(const JsonObject& eventData);
 	/// 把已经拼好的 JSON 发给网页（供窗口过程在 UI 线程上转发后台线程的回包）
 	void postJson(const std::wstring& json);
+	/// method 注册表里的 handler 要用到的两个东西：窗口控制、以及自带回包的图片目录
+	Window* window() const { return win; }
+	void handleGetImageDir(JsonObject& result);
 private:
 	HRESULT onRequest(ICoreWebView2* webview, ICoreWebView2WebResourceRequestedEventArgs* args);
 	HRESULT onMsgReceived(ICoreWebView2* webview, ICoreWebView2WebMessageReceivedEventArgs* args);
@@ -25,7 +28,6 @@ private:
 	HRESULT onCloseWindow(ICoreWebView2* sender, IUnknown* args);
 	std::wstring getContentType(const std::wstring& fileName);
 	HRESULT serveFileFromDataPath(ICoreWebView2WebResourceRequestedEventArgs* args, const std::wstring& resName);
-	void handleGetImageDir(JsonObject& result);
 	/**
 	 * args: { name, width, height, oldName? }；把 images 里 name 这张图按新的宽高另存一份（原图留着）。
 	 * oldName 是正文里当前引用的那份：生成成功后把 image 表里指着它的记录改指到新的一份
@@ -37,7 +39,6 @@ private:
 	 * 做完投 WM_DD_POST_JSON 回 UI 线程再发。返回 { name }：新文件名（原主名 + @宽x高 + 原扩展名），
 	 * 空串 = 没处理（格式 WIC 弄不了、读写失败、或 name 看着不像一个文件名），调用方继续用原图
 	 */
-	void handleResizeImage(const JsonObject& param);
 private:
 	Window* win;
 	ComPtr<ICoreWebView2> webview;

@@ -61,6 +61,9 @@
 | **悬浮**（默认） | 面板**悬浮在 ContentBox 右侧**，覆盖在画布之上 |
 | **钉住**（用户操作后） | 用户可把面板**钉在 ContentBox 右侧**，此时 ContentBox 真正变成**三列布局** |
 
+- **悬浮态也允许拖宽**：拖面板**左边缘**调宽（与钉住态用的是同一个 splitter 机制，只是不挤压画布布局）。
+- 悬浮态宽度同样持久化（`know_detail.width`）。
+
 ### 分隔条
 
 - **知识列表 ↔ 节点画布**：中间有一条 splitter，可拖拽调节两者宽度。
@@ -90,23 +93,24 @@
 | 元素 | 宽度 |
 | --- | --- |
 | `KnowList` | **最小 300px** |
-| `KnowNet` | **占据剩余全部空间**（弹性，不设独立的最小宽度） |
-| `KnowDetail` | **默认 500px** |
+| `KnowNet` | **最小 500px**，正常情况下占据剩余全部空间（弹性） |
+| `KnowDetail` | **默认 500px**（另设最小宽度，拖拽时不得小于它） |
 
-- 拖拽 splitter 时：`KnowList` 不得小于 300px、`KnowDetail` 不得小于其最小宽度；
-  **`KnowNet` 拿剩下的空间**，无需为它另设最小宽度。
+- 拖拽 splitter 时：`KnowList` 不得小于 300px、`KnowNet` 不得小于 500px、`KnowDetail` 不得小于其最小宽度。
+- 三者最小宽度之和超出窗口宽度时（极端窄窗），以 `KnowList` → `KnowDetail` → `KnowNet` 的顺序保底，
+  剩下的给不下面板时不强撑（拖拽被钳制在当前可用范围）。
 
 ### 钉住状态（已确定）
 
-- **钉住 / 取消钉住的状态要持久化**。
-- 持久化方式：新建 **`setting` 表**存储这类设置信息（详见 [40-data-model.md](./40-data-model.md)）。
+- **钉住 / 取消钉住的触发**：`KnowDetail` 面板**右上角放一个钉住图标按钮**（`svg` 图标），点击即切换状态。
+- **状态要持久化**：写 `setting` 表的 `know_detail.pinned`（`0` / `1`），详见 [40-data-model.md](./40-data-model.md)。
+- 悬浮态与钉住态共用同一块内容，只是**是否参与三列布局**不同；切换时保持当前选中对象与未保存内容。
 
 ## 待确认问题
 
-- **`KnowNet` 的最小宽度**取值（用户只给了 `KnowList` 300 与 `KnowDetail` 默认 500）。
-- 详细内容面板在**悬浮态**下是否可拖拽边缘调宽。
-- 面板"钉住/取消钉住"的**触发方式**（按钮？双击标题栏？）。
-- 「文章分类」残留代码需定位清理（已知 `ContentBox.ts` 引用 `ArticleTitle` / `ArticleEditor`）。
+- **`KnowDetail` 的最小宽度**取值（默认 500 已定，最小值未定）。
+- 「文章分类」残留代码需定位清理（已知 `ContentBox.ts` 引用 `ArticleTitle` / `ArticleEditor`），
+  处置原则见 [20-data-layer.md](./20-data-layer.md)「旧代码清理」。
 
 > 已确定：一个节点只属于一个知识、连线不跨知识；点击列表项即加载该知识的节点；
 > `KnowList` 的增删改见 [34-know-list.md](./34-know-list.md)。

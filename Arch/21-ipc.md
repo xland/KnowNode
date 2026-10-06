@@ -39,7 +39,7 @@
 | `showWindow` | 显示窗口 | 窗口控制 |
 | `hittest` | 前端 `WindowBorder` 命中的 `HT_*` 值传给原生做拖拽/改变窗口大小 | 窗口控制 |
 | `minimize` / `maximize` / `restore` | 最小化 / 最大化 / 还原 | 窗口控制 |
-| `getImageDir` | 老项目的图片目录句柄（随回包附带对象） | **老项目残留，待清理** |
+| `getImageDir` | 图片目录句柄（随回包附带对象） | **保留**，改名 `image.dir`（图片逻辑沿用老项目） |
 
 ## 异步处理约定
 
@@ -69,6 +69,7 @@ list.create    node.move    line.remove    detail.save    win.minimize
 | method | args | 说明 |
 | --- | --- | --- |
 | `list.list` | – | 取所有知识 |
+| `list.open` | `{ id }` | **聚合**：一次取回该知识的全部**节点 + 连线**（点列表项时用，省一次往返） |
 | `list.create` | `{ name }` | 新建知识 |
 | `list.update` | `{ id, name }` | 重命名知识 |
 | `list.remove` | `{ id }` | 删除知识（连带节点 / 连线 / 详情） |
@@ -98,6 +99,23 @@ list.create    node.move    line.remove    detail.save    win.minimize
 > **连带改动**：前端 `TitleBar` / `WindowBorder` 中调用这些 method 的地方要同步改名。
 > `getImageDir`（老项目图片相关）随文章功能一并删除。
 
+### 图片相关 method（**已确定：保留，仅改名**）
+
+图片逻辑与老项目一致，只按新命名规范改名（详见 [33-know-detail.md](./33-know-detail.md)）：
+
+| 现名 | 改为 | 说明 |
+| --- | --- | --- |
+| `getImageDir` | `image.dir` | 取数据目录下 `images` 子目录的句柄，用 `PostWebMessageAsJsonWithAdditionalObjects` 附带对象 |
+| ~~`resizeImage`~~ | ~~`image.resize`~~ | **已取消**：图片不再另存缩放图，改尺寸只改显示尺寸（见 [33](./33-know-detail.md)） |
+
+> 前端 `ImageStore.ts` 里写死的 method 名已同步；`Page::handleGetImageDir` 与老 `image` 表**保留不动**；
+> `Page::handleResizeImage`（本就只有声明没有实现）与前端 `ImageResizePlugin` **已删除**。
+
+### 事件推送（C++ → 前端）
+
+- **目前没有任何 C++ 主动推送的事件，事件名清单为空**（`Msg.on` 暂无对应事件）。
+- 将来需要时在此登记事件名，前端用 `Msg.on(eventName, ...)` 订阅。
+
 ### C++ 侧：method → handler 注册表（**已确定**）
 
 `onMsgReceived` 不再堆 `if/else`，改为**注册表分发**：
@@ -105,4 +123,5 @@ list.create    node.move    line.remove    detail.save    win.minimize
 - 注册方式沿用与数据层一致的自注册套路（表类自注册的同一风格）；
 - 未命中的 method 仍然**回 `error`**（保留现有行为，便于暴露"原生没重编"的问题）；
 - handler 统一接收 `args`，统一回包（自带回包的异步场景除外，如需要附带对象的调用）。
-- 老项目图片相关（`getImageDir`、`handleResizeImage`、`Db/Image.h`）是否随文章功能一并删除。
+- 图片相关（`Page::handleGetImageDir`、`Page::handleResizeImage`、老 `image` 表）**确定保留**，
+  只改 method 名；文章相关才删。

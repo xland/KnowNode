@@ -11,6 +11,15 @@ std::wstring Util::convertToWStr(const char* str)
     MultiByteToWideChar(CP_UTF8, 0, str, -1, buffer.data(), count);
     return std::wstring(buffer.data(), buffer.size() - 1);
 }
+std::string Util::convertToStr(const wchar_t* str)
+{
+    if (!str) return std::string();
+    int count = WideCharToMultiByte(CP_UTF8, 0, str, -1, nullptr, 0, nullptr, nullptr);
+    if (count == 0) return std::string();
+    std::vector<char> buffer(count);
+    WideCharToMultiByte(CP_UTF8, 0, str, -1, buffer.data(), count, nullptr, nullptr);
+    return std::string(buffer.data(), buffer.size() - 1);
+}
 std::tuple<void*, DWORD> Util::getRes(const std::wstring& name)
 {
     HRSRC hRes = FindResource(NULL, name.data(), RT_RCDATA);

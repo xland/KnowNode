@@ -1,0 +1,59 @@
+/* 中间的知识节点网络画布（Arch/32）。吃掉 ContentBox 里剩下的全部宽度，
+   Konva 的 stage 挂在 .knowNetCanvas 上，尺寸由它在 ResizeObserver 里同步。 */
+#knowNet {
+  flex: 1 1 auto;
+  min-width: 500px;
+  min-height: 0;
+  position: relative;
+  background: #f7f8fa;
+  overflow: hidden;
+
+  .knowNetCanvas {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* 双击节点改标题的输入框：位置与大小由 JS 按当前缩放算出来盖在节点上（默认藏着） */
+  .knowNetTitleEdit {
+    position: absolute;
+    z-index: 3;
+    display: none;
+    padding: 0 6px;
+    text-align: center;
+    color: #1f2329;
+    background: #fff;
+    border: 2px solid #1677ff;
+    border-radius: 6px;
+    outline: none;
+    box-sizing: border-box;
+  }
+
+  /* 画布本身可平移（stage.draggable 由 Konva 处理），这里只让工具区浮在右上 */
+  .knowNetTools {
+    position: absolute;
+    right: 10px;
+    top: 8px;
+    z-index: 2;
+    display: flex;
+    gap: 6px;
+
+    .icon {
+      width: 24px;
+      height: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 15px;
+      color: #6b7280;
+      background: #fff;
+      border: 1px solid #e5e6eb;
+      border-radius: 4px;
+      cursor: pointer;
+
+      &:hover {
+        color: #1677ff;
+        border-color: #1677ff;
+      }
+    }
+  }
+}

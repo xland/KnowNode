@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS know_node (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     list_id    INTEGER NOT NULL REFERENCES know_list(id)   ON DELETE CASCADE,
     title      TEXT    NOT NULL DEFAULT '未命名',
-    detail_id  INTEGER          REFERENCES know_detail(id) ON DELETE SET NULL,
+    detail_id  INTEGER NOT NULL REFERENCES know_detail(id),  -- 非空，默认 RESTRICT
     x          REAL    NOT NULL DEFAULT 0,   -- 画布坐标（用户拖拽摆放）
     y          REAL    NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS know_line (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     node_a_id  INTEGER NOT NULL REFERENCES know_node(id)   ON DELETE CASCADE,
     node_b_id  INTEGER NOT NULL REFERENCES know_node(id)   ON DELETE CASCADE,
-    detail_id  INTEGER          REFERENCES know_detail(id) ON DELETE SET NULL,
+    detail_id  INTEGER NOT NULL REFERENCES know_detail(id),  -- 非空，默认 RESTRICT
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     CHECK (node_a_id < node_b_id),           -- 无向边的唯一表示
@@ -138,20 +138,24 @@ CREATE TABLE IF NOT EXISTS setting (
 - **时间**：`INTEGER` 存 Unix 毫秒时间戳，便于比较与排序（不用文本）。
 - **无向边**：`CHECK (node_a_id < node_b_id)` + `UNIQUE` 联合保证「A-B 与 B-A 是同一条」且唯一。
 - **坐标**：`x / y` 为画布坐标，由用户拖拽决定并持久化；**允许负坐标**，画布不限边界。
-- **`detail_id` 非空**：节点/连线创建时**立即建一条空详情**并指向它，因此 `detail_id` 是 `NOT NULL`，
-  不需要处理"没有详情"的情况。外键为默认 `RESTRICT`——删除时须**先删节点/连线，再删详情**（顺序反了会被拒）。
+- **`detail_id` 非空（已确定，冲突已解决）**：节点/连线创建时**立即建一条空详情**并指向它，
+  因此 `detail_id` 是 `NOT NULL`，前端不需要处理"没有详情"的分支。
+  外键为默认 `RESTRICT`——删除时须**先删节点/连线，再删详情**（顺序反了会被拒）。
 - **级联**：删除一个知识 → 连带删其节点 → 连带删相关连线（依赖 `PRAGMA foreign_keys = ON`，`Db.cpp` 已开启并校验）。
-- **详情清理**：删节点/连线时需**应用层或触发器**删除对应的 `know_detail` 行（外键 CASCADE 方向是反的）。
+- **详情清理（已确定：应用层删除，不引触发器）**：删节点/连线/知识时在**表类的 `remove()` 里**
+  先取回要清的 `detail_id`，删掉主体行之后再逐个删 `know_detail`（外键 CASCADE 方向是反的，数据库不会代劳）。
+  - 删节点：先查出**它的所有连线的 `detail_id`**（连线会被外键级联删掉，详情要提前记下来），删节点后一并删详情。
+  - 删知识：先查出该知识下所有节点与连线的 `detail_id`，删知识后一并删详情。
 - **删除节点（已确定）**：连带删除**它的所有连线**，并删除**对应的 `KnowDetail` 记录**。
   连线本身由外键 `ON DELETE CASCADE` 自动清掉；详情需在表类里显式删除。
 
 ## 命名（已确定）
 
 - **表名 / 列名一律小写下划线**：`know_list`、`know_node`、`know_line`、`know_detail`；
-  字段如 `list_id`、`node_a_id`、`detail_id`、`is_initial`、`created_at`、`updated_at`。
+  字段如 `list_id`、`node_a_id`、`detail_id`、`created_at`、`updated_at`（`is_initial` 已删除，勿再使用）。
 - **C++ 侧表类名不加 `Table` 后缀**，直接用：`KnowList` / `KnowNode` / `KnowLine` / `KnowDetail`
   （外加 `Setting`）。与前端面板同名无妨——二者分属 C++ 与 TS 两套代码，不会冲突。
 
 ## 待确认问题
-- 详情与节点/连线是否严格 1:1（一个节点只会有一份详情）。
-- 新建节点的初始坐标规则（见 [32-know-net.md](./32-know-net.md)「由此产生的问题」）。
+
+- （暂无）`detail_id` 非空 ⇒ 详情与节点/连线**严格 1:1**，此前的疑问已消除。

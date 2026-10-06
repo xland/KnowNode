@@ -59,7 +59,9 @@
 | 目录 / 文件 | 状态 |
 | --- | --- |
 | `EditorBar/`、`EditorContent/` | **保留**：roosterjs 富文本编辑器的工具条与编辑区，用于知识详情（见 33） |
-| `ArticleEditor/`、`ArticleTitle/`、`EditorTitle/` | 旧项目「文章」概念组件，去留待确认 |
+| `Dialog/`、`Menu/` | **新增**：通用悬浮对话框（新建 / 重命名知识）与通用右键菜单（列表项与画布共用），
+  都挂 `body`——面板多有 `overflow: hidden`，留在面板里会被裁掉 |
+| `ArticleEditor/`、`ArticleTitle/`、`EditorTitle/` | **已删除**（旧项目「文章」相关，见 [20](./20-data-layer.md)） |
 | `CodeHighlight.ts`、`CtrlBase.ts`、`ImageStore.ts`、`Main.scss`、`Main.ts`、`ToolbarButton.ts` | 用途待梳理 |
 
 ## 已知问题（**用户已批准修复**）
@@ -69,4 +71,13 @@
 
 ## 待确认问题
 
-- `Article*`、`Editor*` 旧组件是改造复用还是整体重写。
+- `CodeHighlight.ts`、`CtrlBase.ts`、`ImageStore.ts`、`ToolbarButton.ts` 等散件的用途梳理
+  （`ImageStore.ts` 已确认保留，见 [33](./33-know-detail.md)）。
+- 未选中节点时状态栏左侧显示「未选中节点」是否合意（已先按这个实现）。
+
+## 已实现（2026-10-06）
+
+- `Msg.ts` 拆成两个 Map（pending / 事件监听器）。
+- 旧文章组件删除，`ContentBox` 改为挂 `KnowList` / `KnowNet` / `KnowDetail`；splitter 机制泛化。
+- `StatusBar` 按新定义重写：左侧当前选中节点、右侧当前知识节点总数。
+- `TitleBar` / `WindowBorder` 的窗口 method 已改为 `win.*`；`Main.ts` 的 `showWindow` → `win.show`。

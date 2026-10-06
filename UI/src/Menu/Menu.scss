@@ -1,0 +1,34 @@
+/* 通用右键菜单：默认藏着，加 .show 才显示。挂 body、position: fixed，
+   坐标由 Menu.open() 按点击处给（已做视口内夹取）。 */
+#menu {
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 999;
+  display: none;
+  min-width: 120px;
+  padding: 4px 0;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 4px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.14);
+  user-select: none;
+
+  &.show {
+    display: block;
+  }
+
+  .menuItem {
+    height: 28px;
+    padding: 0 14px;
+    font-size: 13px;
+    line-height: 28px;
+    color: #1f2329;
+    cursor: pointer;
+    white-space: nowrap;
+
+    &:hover {
+      background: #e8ecf4;
+    }
+  }
+}

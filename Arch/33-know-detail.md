@@ -47,3 +47,30 @@
 
 - 即时保存**加防抖**：停止输入约 **300ms** 后才写库（避免每敲一个字写一次库）。
 - 需注意防抖窗口内若发生面板关闭/切换知识，要**立即 flush** 一次，不能丢掉最后那几个字。
+
+## 详情中的图片（**已确定：沿用老项目逻辑**）
+
+- **存储位置**：应用数据目录下的 **`images` 子目录**（`Env::getDataPath() / images`，
+  与老项目一致；注意是 `images` 复数）。
+- **落盘时机**：粘贴 / 拖放图片进编辑器时**自动保存**到该目录。
+- **落盘方式**：前端拿到目录句柄后**在 JS 侧直接写文件**（不经过原生逐字节传）：
+  1. `Msg.invokeWithObjects("image.dir")` —— 原生用 `PostWebMessageAsJsonWithAdditionalObjects`
+     把 File System Access 的**目录句柄**放进 `objects` 回给前端，页面存活期间取一次就够；
+  2. roosterjs 的 `ImagePlugin` 在下一个宏任务扫描正文里的 `img[src^="data:"] / img[src^="blob:"]`，
+     逐个 `fetch` 成 `Blob` 后写进目录；
+  3. 文件名形如 `img_<时间戳>_<随机串>.<扩展名>`，扩展名优先取原文件后缀，取不到退回 MIME 子类型；
+  4. 写成后把正文里的 `src` 换成 **`https://app.localhost/images/<文件名>`**，并**改内容模型**再写回
+     （只改 DOM 的话 roosterjs 缓存里仍是 base64，入库时存的还是旧地址）。
+
+> **为什么必须落盘**：`blob:` / `data:` 只对当前会话有效，写进正文 HTML 入库后重开就是裂图，
+> 而且 base64 会让整张图随正文反复存取。落盘后正文里只剩一个文件名。
+
+- **图片的读取**：`https://app.localhost/...` 由原生 `Page::onRequest` 从数据目录应答
+  （`serveFileFromDataPath`，已做路径规范化防 `../` 越界），因此 Debug / Release 都能显示。
+- **缩放（已确定：不生成缩放图）**：用户拖拽改的只是 `img` 的**显示尺寸**（roosterjs 的
+  `ImageEditPlugin` 写进 `style` 的 width/height）；原生**不再按新尺寸另存一份图**，
+  正文从头到尾引用落盘时的那一份原图，目录里不攒缩放件。
+  老项目的 `image.resize`、`Page::handleResizeImage`、`ImageResizePlugin` 因此删除。
+- **老 `image` 表保留**：记录正文引用了哪些图片（缩放时改指向、判断有无别处引用），逻辑不变。
+- **保留的前端代码**：`UI/src/ImageStore.ts`、`UI/src/EditorContent/ImagePlugin.ts`、
+  `UI/src/EditorContent/ImageResize.ts`、`UI/src/EditorBar/Image/`。

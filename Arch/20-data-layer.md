@@ -70,17 +70,21 @@ public:
     // void insert(...);  std::optional<Node> findById(...);  ...
 
 private:
-    NodesTable();                      // 构造时向 Db::instance().registerTable(...) 注册本表
+    KnowNode();                        // 构造时向 Db::instance().registerTable(...) 注册本表
 };
 ```
 
 自注册做法（避免 `Db` 里出现一长串表清单）：在每个表类 `.cpp` 中放一个文件级静态注册器，
 它在静态初始化期构造表单例并完成注册；`Db::init()` 只需遍历已注册表。
+`Db::instance()` 用**函数内静态对象**，因此表类在静态初始化期引用它是安全的（首次调用才构造）。
 
 ```cpp
-// Db/NodesTable.cpp
-static DbTableRegistrar<NodesTable> g_nodesTable;   // main() 之前完成注册
+// Db/KnowNode.cpp
+static DbTableRegistrar<KnowNode> g_knowNode;   // main() 之前完成注册
 ```
+
+> **已确认并落地**：自注册方案认可，代码已在 `KnowNode/Db/` 实现
+> （`Db.h` / `Db.cpp` + `KnowList` / `KnowNode` / `KnowLine` / `KnowDetail` / `Setting` 五个表类）。
 
 ## 现状代码（含老项目痕迹，需按新约定改造）
 
@@ -100,8 +104,22 @@ namespace Db
   - `migrateImageTable()`：旧库 `image` 表的 `img_path` 列改名对齐 `img_name`，注释自述"确认没人用旧库后可删除"。
   - 注释中提到的 `Category` / `Article` 表及"写入测试数据"逻辑，属于旧项目的表结构，不纳入新架构。
 
+## 旧代码清理（**已确定**）
+
+**删除**（老项目「文章」相关，与新架构无关）：
+
+- 前端组件：`UI/src/ArticleEditor/`、`UI/src/ArticleTitle/`、`UI/src/EditorTitle/`；`ContentBox.ts` 里对它们的引用。
+- 表与迁移：`category` / `article` 表的建表与迁移逻辑。
+- 通信 method：`getImageDir` 之外的老 method 一律按 [21](./21-ipc.md) 的新命名重写。
+
+**保留**（`packages/` 不动；图片链条与老项目一致，见 [33-know-detail.md](./33-know-detail.md)）：
+
+- `UI/src/ImageStore.ts`、`UI/src/EditorContent/ImagePlugin.ts`、`ImageResize.ts`、`EditorBar/Image/`。
+- C++ 侧 `Page::handleGetImageDir`、数据目录下的 `images` 子目录、以及老 `image` 表（`img_name` 等）——
+  改为 `image.dir` 后继续用。**`Page::handleResizeImage` 已删除**（图片不再另存缩放图，见 [33](./33-know-detail.md)）。
+- `migrateImageTable()`：旧库 `image` 表的列改名迁移，对新库无副作用，**暂时保留**
+  （确认无人使用旧库后再删）。
+
 ## 待确认问题
 
-- 上述「类结构草案」是否认可（尤其是「文件级静态注册器 + `Db::init()` 遍历」的自注册方式）。
-- 首个要建的表是什么（知识节点表？关联表？），以及它的字段。
-- 已有 `migrateImageTable()` 是否随旧库一起废弃删除。
+- （暂无）类结构草案、自注册方式、表结构均已确认并落地。

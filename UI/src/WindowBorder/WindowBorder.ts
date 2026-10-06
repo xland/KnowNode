@@ -38,7 +38,7 @@ class WindowBorder extends CtrlBase {
     ];
     for (const [id, val] of triggers) {
       this.dom.querySelector<HTMLElement>(`#${id}`)!.addEventListener("mousedown", () => {
-        Msg.invoke("hittest", { val });
+        Msg.invoke("win.hittest", { val });
       });
     }
   }

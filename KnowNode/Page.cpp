@@ -2,11 +2,208 @@
 #include "Page.h"
 #include "Window.h"
 #include "Db/Db.h"
+#include "Db/KnowDetail.h"
+#include "Db/KnowLine.h"
+#include "Db/KnowList.h"
+#include "Db/KnowNode.h"
+#include "Db/Setting.h"
 #include "Util.h"
 
 #include <fstream>
 #include <filesystem>
+#include <functional>
+#include <map>
 #include <thread>
+
+namespace
+{
+    /// 取 args 里的浮点参数（节点坐标）；缺失或类型不对时按 0 处理
+    double argDouble(const JsonObject& args, const wchar_t* key)
+    {
+        if (!args.HasKey(key)) return 0;
+        auto value = args.GetNamedValue(key);
+        return value.ValueType() == JsonValueType::Number ? value.GetNumber() : 0;
+    }
+
+    std::wstring toWide(const std::string& utf8) { return Util::convertToWStr(utf8.c_str()); }
+    std::string toUtf8(const std::wstring& wide) { return Util::convertToStr(wide.c_str()); }
+
+    JsonValue num(double v) { return JsonValue::CreateNumberValue(v); }
+    JsonValue text(const std::string& v) { return JsonValue::CreateStringValue(toWide(v)); }
+    void fail(JsonObject& result, const wchar_t* message)
+    {
+        result.SetNamedValue(L"error", JsonValue::CreateStringValue(message));
+    }
+
+    void listJson(JsonArray& arr, const KnowListItem& item)
+    {
+        JsonObject o;
+        o.SetNamedValue(L"id", num(static_cast<double>(item.id)));
+        o.SetNamedValue(L"name", text(item.name));
+        arr.Append(o);
+    }
+    void nodeJson(JsonArray& arr, const KnowNodeItem& item)
+    {
+        JsonObject o;
+        o.SetNamedValue(L"id", num(static_cast<double>(item.id)));
+        o.SetNamedValue(L"listId", num(static_cast<double>(item.listId)));
+        o.SetNamedValue(L"title", text(item.title));
+        o.SetNamedValue(L"detailId", num(static_cast<double>(item.detailId)));
+        o.SetNamedValue(L"x", num(item.x));
+        o.SetNamedValue(L"y", num(item.y));
+        arr.Append(o);
+    }
+    void lineJson(JsonArray& arr, const KnowLineItem& item)
+    {
+        JsonObject o;
+        o.SetNamedValue(L"id", num(static_cast<double>(item.id)));
+        o.SetNamedValue(L"nodeAId", num(static_cast<double>(item.nodeAId)));
+        o.SetNamedValue(L"nodeBId", num(static_cast<double>(item.nodeBId)));
+        o.SetNamedValue(L"detailId", num(static_cast<double>(item.detailId)));
+        arr.Append(o);
+    }
+
+    /// 节点 / 连线的详情 id：二者各自持有 detail_id，这里按 target 分派
+    int64_t detailIdOf(const std::wstring& target, int64_t id)
+    {
+        if (target == L"node")
+        {
+            KnowNodeItem item;
+            return KnowNode::instance().get(id, item) ? item.detailId : 0;
+        }
+        if (target == L"line")
+        {
+            KnowLineItem item;
+            return KnowLine::instance().get(id, item) ? item.detailId : 0;
+        }
+        return 0;
+    }
+
+    /**
+     * method → handler 注册表（命名与清单见 Arch/21-ipc.md）。
+     * handler 返回 true 表示**它自己已经发过回包**（image.dir 要随包附带目录句柄），
+     * 调用方不要再发一次。统一回包、未知 method 回 error 的行为都在 onMsgReceived 里。
+     */
+    const std::map<std::wstring, std::function<bool(Page*, const JsonObject&, JsonObject&)>>& msgHandlers()
+    {
+        using Handler = std::function<bool(Page*, const JsonObject&, JsonObject&)>;
+        static const std::map<std::wstring, Handler> table = {
+            // ---- 窗口控制 ----
+            { L"win.show", [](Page* p, const JsonObject&, JsonObject&) { p->window()->show(); return false; } },
+            { L"win.hittest", [](Page* p, const JsonObject& a, JsonObject&) {
+                p->window()->hittest(static_cast<int>(Util::argNumber(a, L"val"))); return false; } },
+            { L"win.minimize", [](Page* p, const JsonObject&, JsonObject&) { p->window()->minimize(); return false; } },
+            { L"win.maximize", [](Page* p, const JsonObject&, JsonObject&) { p->window()->maximize(); return false; } },
+            { L"win.restore", [](Page* p, const JsonObject&, JsonObject&) { p->window()->restore(); return false; } },
+
+            // ---- 知识 list ----
+            { L"list.list", [](Page*, const JsonObject&, JsonObject& r) {
+                JsonArray arr;
+                for (const auto& item : KnowList::instance().all()) listJson(arr, item);
+                r.SetNamedValue(L"result", arr);
+                return false; } },
+            { L"list.create", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto name = toUtf8(Util::argString(a, L"name"));
+                if (name.empty()) { fail(r, L"知识名称不能为空"); return false; }
+                auto id = KnowList::instance().add(name);
+                if (id == 0) { fail(r, L"新建知识失败"); return false; }
+                r.SetNamedValue(L"result", num(static_cast<double>(id)));
+                return false; } },
+            { L"list.update", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto name = toUtf8(Util::argString(a, L"name"));
+                if (name.empty()) { fail(r, L"知识名称不能为空"); return false; }
+                if (!KnowList::instance().rename(Util::argNumber(a, L"id"), name)) { fail(r, L"重命名知识失败"); return false; }
+                return false; } },
+            { L"list.remove", [](Page*, const JsonObject& a, JsonObject& r) {
+                if (!KnowList::instance().remove(Util::argNumber(a, L"id"))) { fail(r, L"删除知识失败"); return false; }
+                return false; } },
+            // 聚合：点列表项时一次取回该知识的节点 + 连线
+            { L"list.open", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto listId = Util::argNumber(a, L"id");
+                JsonArray nodes;
+                for (const auto& item : KnowNode::instance().ofList(listId)) nodeJson(nodes, item);
+                JsonArray lines;
+                for (const auto& item : KnowLine::instance().ofList(listId)) lineJson(lines, item);
+                JsonObject data;
+                data.SetNamedValue(L"nodes", nodes);
+                data.SetNamedValue(L"lines", lines);
+                r.SetNamedValue(L"result", data);
+                return false; } },
+
+            // ---- 节点 node ----
+            { L"node.list", [](Page*, const JsonObject& a, JsonObject& r) {
+                JsonArray arr;
+                for (const auto& item : KnowNode::instance().ofList(Util::argNumber(a, L"listId"))) nodeJson(arr, item);
+                r.SetNamedValue(L"result", arr);
+                return false; } },
+            { L"node.create", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto title = toUtf8(Util::argString(a, L"title"));
+                auto id = title.empty()
+                    ? KnowNode::instance().add(Util::argNumber(a, L"listId"), argDouble(a, L"x"), argDouble(a, L"y"))
+                    : KnowNode::instance().add(Util::argNumber(a, L"listId"), argDouble(a, L"x"), argDouble(a, L"y"), title);
+                if (id == 0) { fail(r, L"新建节点失败"); return false; }
+                r.SetNamedValue(L"result", num(static_cast<double>(id)));
+                return false; } },
+            { L"node.update", [](Page*, const JsonObject& a, JsonObject& r) {
+                // 标题为空时回落到表类里的默认值「未命名」，不在这里另立一份规则
+                if (!KnowNode::instance().updateTitle(Util::argNumber(a, L"id"), toUtf8(Util::argString(a, L"title"))))
+                { fail(r, L"修改节点标题失败"); return false; }
+                return false; } },
+            { L"node.move", [](Page*, const JsonObject& a, JsonObject& r) {
+                if (!KnowNode::instance().move(Util::argNumber(a, L"id"), argDouble(a, L"x"), argDouble(a, L"y")))
+                { fail(r, L"保存节点坐标失败"); return false; }
+                return false; } },
+            { L"node.remove", [](Page*, const JsonObject& a, JsonObject& r) {
+                if (!KnowNode::instance().remove(Util::argNumber(a, L"id"))) { fail(r, L"删除节点失败"); return false; }
+                return false; } },
+
+            // ---- 连线 line ----
+            { L"line.list", [](Page*, const JsonObject& a, JsonObject& r) {
+                JsonArray arr;
+                for (const auto& item : KnowLine::instance().ofList(Util::argNumber(a, L"listId"))) lineJson(arr, item);
+                r.SetNamedValue(L"result", arr);
+                return false; } },
+            { L"line.create", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto id = KnowLine::instance().add(Util::argNumber(a, L"nodeAId"), Util::argNumber(a, L"nodeBId"));
+                if (id == 0) { fail(r, L"建立关联失败：两端必须属于同一个知识，且不能是同一个节点"); return false; }
+                r.SetNamedValue(L"result", num(static_cast<double>(id)));
+                return false; } },
+            { L"line.remove", [](Page*, const JsonObject& a, JsonObject& r) {
+                if (!KnowLine::instance().remove(Util::argNumber(a, L"id"))) { fail(r, L"删除关联失败"); return false; }
+                return false; } },
+
+            // ---- 详情 detail ----
+            { L"detail.get", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto target = Util::argString(a, L"target");
+                if (target != L"node" && target != L"line") { fail(r, L"target 只能是 node 或 line"); return false; }
+                r.SetNamedValue(L"result", text(KnowDetail::instance().content(detailIdOf(target, Util::argNumber(a, L"id")))));
+                return false; } },
+            { L"detail.save", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto target = Util::argString(a, L"target");
+                if (target != L"node" && target != L"line") { fail(r, L"target 只能是 node 或 line"); return false; }
+                if (!KnowDetail::instance().save(detailIdOf(target, Util::argNumber(a, L"id")),
+                        toUtf8(Util::argString(a, L"content"))))
+                { fail(r, L"保存详情失败"); return false; }
+                return false; } },
+
+            // ---- 设置 setting ----
+            { L"setting.get", [](Page*, const JsonObject& a, JsonObject& r) {
+                auto fallback = toUtf8(Util::argString(a, L"fallback"));
+                r.SetNamedValue(L"result", text(Setting::instance().get(toUtf8(Util::argString(a, L"key")), fallback)));
+                return false; } },
+            { L"setting.set", [](Page*, const JsonObject& a, JsonObject& r) {
+                Setting::instance().set(toUtf8(Util::argString(a, L"key")), toUtf8(Util::argString(a, L"value")));
+                return false; } },
+
+            // ---- 图片 image（沿用老项目逻辑，只改了 method 名）----
+            { L"image.dir", [](Page* p, const JsonObject&, JsonObject& r) {
+                // 句柄只能随附加对象一起发，成功后 handler 内部已回包
+                p->handleGetImageDir(r);
+                return true; } },
+        };
+        return table;
+    }
+}
 
 Page::Page(Window* win, ComPtr<ICoreWebView2>& webview) :win{ win }, webview{ webview }
 {
@@ -56,31 +253,31 @@ HRESULT Page::onMsgReceived(ICoreWebView2* webview, ICoreWebView2WebMessageRecei
     auto method = param.GetNamedString(L"method");
     JsonObject result;
     result.SetNamedValue(L"id", JsonValue::CreateStringValue(param.GetNamedString(L"id")));
-    if (method == L"showWindow") {
-        win->show();
+    auto args = Util::msgArgs(param);
+    std::wstring methodStr{ method.c_str() };
+
+    // method → handler 注册表分发（命名与清单见 Arch/21-ipc.md）
+    try
+    {
+        const auto& table = msgHandlers();
+        auto it = table.find(methodStr);
+        if (it != table.end())
+        {
+            // 返回 true = handler 自己已经发过回包（image.dir 要随包附带目录句柄）
+            if (it->second(this, args, result)) return S_OK;
+        }
+        else
+        {
+            // 未知方法回一个 error：前端 Msg.invoke 会 reject，而不是静默 resolve(undefined)。
+            // 之前"原生侧改了却忘了重新编译 exe"就是被静默吞掉的，补上这条能直接暴露出来
+            std::wstring message = L"unknown method: " + methodStr;
+            result.SetNamedValue(L"error", JsonValue::CreateStringValue(message));
+        }
     }
-    else if (method == L"hittest") {
-        // args: { val }；val 是 HT_* 命中值，由前端 WindowBorder 给
-        win->hittest(static_cast<int>(param.GetNamedObject(L"args").GetNamedNumber(L"val")));
-    }
-    else if (method == L"minimize") {
-        win->minimize();
-    }
-    else if (method == L"maximize") {
-        win->maximize();
-    }
-    else if (method == L"restore") {
-        win->restore();
-    }
-    else if (method == L"getImageDir") {
-        // 把图片目录句柄随回包发给 JS（自带回包逻辑，不走下面的统一 PostWebMessageAsJson）
-        handleGetImageDir(result);
-        return S_OK;
-    }    
-    else {
-        // 未知方法回一个 error：前端 Msg.invoke 会 reject，而不是静默 resolve(undefined)。
-        // 之前"原生侧改了却忘了重新编译 exe"就是被静默吞掉的，补上这条能直接暴露出来
-        std::wstring message = L"unknown method: " + std::wstring(method.c_str());
+    catch (const winrt::hresult_error& e)
+    {
+        // 单个 method 出错不该把进程带走：照样回一个带 id 的 error，前端那边 reject
+        std::wstring message = methodStr + L" 处理失败：" + std::wstring(e.message().c_str());
         result.SetNamedValue(L"error", JsonValue::CreateStringValue(message));
     }
     auto resultStr = result.Stringify();

@@ -1,0 +1,93 @@
+/* 通用悬浮对话框：默认藏着，加 .show 才显示。
+   覆盖整个视口，挂在 body 上而不是某个面板里——面板多有 overflow: hidden，
+   在面板里会被裁掉（老项目的菜单就是这么处理的）。 */
+#dialogMask {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.35);
+
+  &.show {
+    display: flex;
+  }
+
+  .dialog {
+    width: 320px;
+    background: #fff;
+    border-radius: 6px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.18);
+    overflow: hidden;
+    user-select: none;
+  }
+
+  .dialogTitle {
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #1f2329;
+    border-bottom: 1px solid #f0f0f0;
+  }
+
+  .dialogBody {
+    padding: 16px;
+  }
+
+  .dialogLabel {
+    margin-bottom: 6px;
+    font-size: 12px;
+    color: #8a9099;
+  }
+
+  .dialogInput {
+    width: 100%;
+    height: 30px;
+    padding: 0 8px;
+    font-size: 13px;
+    color: #1f2329;
+    border: 1px solid #d9dde3;
+    border-radius: 4px;
+    outline: none;
+    box-sizing: border-box;
+
+    &:focus {
+      border-color: #1677ff;
+    }
+  }
+
+  .dialogFooter {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 0 16px 16px;
+  }
+
+  .dialogBtn {
+    height: 28px;
+    padding: 0 14px;
+    font-size: 13px;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid #d9dde3;
+    background: #fff;
+    color: #1f2329;
+
+    &:hover {
+      border-color: #1677ff;
+      color: #1677ff;
+    }
+  }
+
+  .dialogOk {
+    border-color: #1677ff;
+    background: #1677ff;
+    color: #fff;
+
+    &:hover {
+      background: #4096ff;
+      color: #fff;
+    }
+  }
+}
