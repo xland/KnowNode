@@ -36,6 +36,21 @@
     <ClCompile Include="Db\Db.cpp">
       <Filter>源文件</Filter>
     </ClCompile>
+    <ClCompile Include="Db\KnowList.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Db\KnowNode.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Db\KnowLine.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Db\KnowDetail.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Db\Setting.cpp">
+      <Filter>源文件</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />
@@ -57,6 +72,24 @@
       <Filter>头文件</Filter>
     </ClInclude>
     <ClInclude Include="Db\Db.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\DbStmt.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\KnowList.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\KnowNode.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\KnowLine.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\KnowDetail.h">
+      <Filter>头文件</Filter>
+    </ClInclude>
+    <ClInclude Include="Db\Setting.h">
       <Filter>头文件</Filter>
     </ClInclude>
   </ItemGroup>

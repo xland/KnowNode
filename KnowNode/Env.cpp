@@ -11,7 +11,7 @@ void Env::init()
 	env = std::make_unique<Env>();
 	env->checkRuntimeVersion();
     env->initDataPath();
-    Db::init();
+    Db::instance().init();
     env->initWebViewEnv();
 }
 

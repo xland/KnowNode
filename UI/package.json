@@ -16,6 +16,7 @@
     "vite": "^8.2.2"
   },
   "dependencies": {
+    "konva": "^10.7.1",
     "roosterjs": "^9.59.0",
     "roosterjs-content-model-api": "^9.59.0",
     "roosterjs-content-model-core": "^9.59.0",

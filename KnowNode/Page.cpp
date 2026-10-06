@@ -246,7 +246,7 @@ namespace
      */
     bool stillReferenced(const std::wstring& imageName)
     {
-        sqlite3* conn = Db::get();
+        sqlite3* conn = Db::instance().conn();
         if (!conn) return true;
         int count = 0;
         static const char* sql = "SELECT COUNT(*) FROM image WHERE img_name = ?1 AND is_delete = 0;";

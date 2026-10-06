@@ -149,6 +149,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Db\Db.cpp" />
+    <ClCompile Include="Db\KnowDetail.cpp" />
+    <ClCompile Include="Db\KnowLine.cpp" />
+    <ClCompile Include="Db\KnowList.cpp" />
+    <ClCompile Include="Db\KnowNode.cpp" />
+    <ClCompile Include="Db\Setting.cpp" />
     <ClCompile Include="Env.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Page.cpp" />
@@ -161,6 +166,12 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Db\Db.h" />
+    <ClInclude Include="Db\DbStmt.h" />
+    <ClInclude Include="Db\KnowDetail.h" />
+    <ClInclude Include="Db\KnowLine.h" />
+    <ClInclude Include="Db\KnowList.h" />
+    <ClInclude Include="Db\KnowNode.h" />
+    <ClInclude Include="Db\Setting.h" />
     <ClInclude Include="Env.h" />
     <ClInclude Include="Page.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
