@@ -81,6 +81,9 @@ void Window::show()
 
 void Window::hittest(int val)
 {
+    // 最大化时不进"调整大小"的流程：拖边框没有意义（前端那 8 个触发区同时已失效，这是兜底的一道）。
+    // HTLEFT(10) .. HTBOTTOMRIGHT(17) 即四条边与四个角；HTCAPTION 之类的不受影响。
+    if (val >= HTLEFT && val <= HTBOTTOMRIGHT && IsZoomed(hwnd)) return;
     ReleaseCapture();
     PostMessage(hwnd, WM_NCLBUTTONDOWN, val, 0);
 }

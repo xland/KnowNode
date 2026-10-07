@@ -19,13 +19,15 @@ const DETAIL_WIDTH_KEY = "know_detail.width";
 /**
  * 容器区（模块单例，见 Arch/31）：横向三块 —— 知识列表 / 节点画布 / 详细内容。
  *
+ * 三块并排成三栏：详情那一栏**默认收起**（不占宽度），用户点 `#detailToggle` 才展开。
+ *
  * 两块 splitter：
  * - 列表右边缘那条拖列表宽度（画布拿剩下的）；
- * - 详情左边缘那条拖详情宽度（悬浮态也能拖，拖的是浮层自己的宽）。
+ * - 详情左边缘那条拖详情宽度。
  * 二者都是改"被拖的那个面板"的宽度，另一边由 flex 自动吃掉剩余空间。
  *
- * 详情面板的钉住 / 悬浮由 KnowDetail 自己切 class，这里只监听事件把 splitter 重新贴到面板边缘。
- * splitter 是绝对定位的，面板尺寸一变（拖过、窗口拉伸、钉住切换）就要重新贴一次。
+ * 展开按钮与两条 splitter 都是绝对定位的，面板尺寸一变（展开 / 收起、拖过、窗口拉伸）
+ * 就要重新贴一次——统一在 syncSplitterPositions() 里做。
  */
 class ContentBox extends CtrlBase {
   constructor() {
@@ -43,7 +45,9 @@ class ContentBox extends CtrlBase {
       splitter.addEventListener("pointerdown", (e) => this.startDrag(splitter, e));
     }
 
-    Msg.on("knowDetailPinned", () => this.syncSplitterPositions());
+    // 详情那一栏展开 / 收起（用户点按钮），它那条 splitter 与那个按钮都要重新贴边
+    Msg.on("knowDetailExpanded", () => this.syncSplitterPositions());
+    this.dom.querySelector<HTMLElement>("#detailToggle")!.addEventListener("click", () => void KnowDetail.toggle());
     // 窗口拉伸会让面板宽度自己变（画布是弹性的），splitter 得跟着走
     new ResizeObserver(() => this.syncSplitterPositions()).observe(this.dom);
   }
@@ -83,6 +87,23 @@ class ContentBox extends CtrlBase {
       const edge = splitter.dataset.edge === "left" ? rect.left : rect.right;
       splitter.style.left = `${edge - boxLeft - half}px`;
     }
+    this.syncToggle();
+  }
+
+  /**
+   * 展开按钮：收起时贴在容器右边缘，展开时贴到详情面板的左边缘外侧（所以它要往左挪一个面板宽度）。
+   * 图标方向也跟着换：收起时是 icon-expand-left（点它往左展开），展开时是 icon-expand-right。
+   */
+  private syncToggle(): void {
+    const toggle = this.dom.querySelector<HTMLElement>("#detailToggle")!;
+    const expanded = KnowDetail.isExpanded;
+    const width = expanded ? this.panel("knowDetail").getBoundingClientRect().width : 0;
+    toggle.style.right = `${width}px`;
+    toggle.classList.toggle("icon-expand-right", expanded);
+    toggle.classList.toggle("icon-expand-left", !expanded);
+    toggle.title = expanded ? "收起详细内容" : "展开详细内容";
+    // 没打开任何知识：既没有节点也没有"知识本身"可显示，按钮也就没什么可展开的
+    toggle.style.visibility = KnowDetail.canExpand ? "" : "hidden";
   }
 
   private startDrag(splitter: HTMLElement, e: PointerEvent): void {
@@ -97,7 +118,7 @@ class ContentBox extends CtrlBase {
     const min = targetId === "knowList" ? KNOW_LIST_MIN : KNOW_DETAIL_MIN;
     // 拖到头也不能把另一边挤没：画布始终要留住 KNOW_NET_MIN
     const reserved =
-      targetId === "knowList" ? KNOW_NET_MIN + this.pinnedDetailWidth() : KNOW_LIST_MIN + KNOW_NET_MIN;
+      targetId === "knowList" ? KNOW_NET_MIN + this.visibleDetailWidth() : KNOW_LIST_MIN + KNOW_NET_MIN;
     const max = Math.max(min, boxWidth - reserved);
 
     const onMove = (ev: PointerEvent) => {
@@ -117,9 +138,9 @@ class ContentBox extends CtrlBase {
     document.addEventListener("pointerup", onUp);
   }
 
-  /** 详情面板只有在钉住时才真正占布局宽度；悬浮时它盖在画布上，不算进"要留住的空间" */
-  private pinnedDetailWidth(): number {
-    return KnowDetail.isPinned ? this.panel("knowDetail").getBoundingClientRect().width : 0;
+  /** 详情栏只有展开时才占布局宽度；收起时它是 display:none，不算进"要留住的空间" */
+  private visibleDetailWidth(): number {
+    return KnowDetail.isExpanded ? this.panel("knowDetail").getBoundingClientRect().width : 0;
   }
 
   private async saveWidth(targetId: string, width: number): Promise<void> {

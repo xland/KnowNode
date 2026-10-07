@@ -10,6 +10,11 @@
   > * {
     pointer-events: auto;
   }
+
+  /* 最大化时 8 个边框 / 角点集体失效：不命中鼠标，光标也不再变（拖不动的边框不该有那个光标） */
+  &.maximized > * {
+    pointer-events: none;
+  }
 }
 
 #borderLeft {

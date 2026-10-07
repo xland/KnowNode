@@ -1,13 +1,9 @@
-/* 右侧详细内容面板（Arch/33）。
-   默认隐藏（没有选中任何节点/连线时不显示），加 .show 才出现。
-
-   两种形态：
-   - 默认悬浮：绝对定位贴 ContentBox 右侧，盖在画布之上，拖左边缘可调宽；
-   - .pinned（钉住）：变回普通 flex 子项，ContentBox 真正成为三列布局。
-   切换由 KnowDetail 加/摘这个 class，ContentBox 监听 knowDetailPinned 事件重排。 */
+/* 右侧详细内容面板，即三栏布局的第三栏（Arch/31）。
+   没有选中任何节点/连线时隐藏（摘掉 .show）：它是普通 flex 子项，隐藏就不占宽度，画布吃掉剩余空间。
+   选中后加 .show 出现，拖它左边缘那条 splitter 调宽（宽度存 setting 表）。 */
 #knowDetail {
   display: none;
-  width: 500px;
+  width: 600px;
   min-width: 300px;
   flex-shrink: 0;
   background: #fff;
@@ -19,53 +15,6 @@
     display: flex;
   }
 
-  /* 悬浮态：脱离 flex 流，盖在画布右侧 */
-  &:not(.pinned) {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 5;
-    box-shadow: -2px 0 10px rgba(0, 0, 0, 0.08);
-  }
-
-  .knowDetailHeader {
-    flex: none;
-    height: 34px;
-    padding: 0 8px 0 12px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid #f0f0f0;
-    user-select: none;
-  }
-
-  .knowDetailCaption {
-    font-size: 13px;
-    color: #1f2329;
-  }
-
-  /* 钉住按钮：钉住时高亮成蓝色 */
-  .knowDetailPin {
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #8a9099;
-    border-radius: 4px;
-    cursor: pointer;
-
-    &:hover {
-      background: #e8ecf4;
-      color: #1677ff;
-    }
-
-    &.on {
-      color: #1677ff;
-    }
-  }
-
   .knowDetailBody {
     flex: 1 1 auto;
     min-height: 0;
@@ -74,32 +23,11 @@
     overflow: hidden;
   }
 
-  .knowDetailTitleRow {
-    flex: none;
-    padding: 10px 12px 6px;
-  }
-
-  #knowDetailTitleInput {
-    width: 100%;
-    height: 30px;
-    padding: 0 8px;
-    font-size: 14px;
-    color: #1f2329;
-    border: 1px solid #d9dde3;
-    border-radius: 4px;
-    outline: none;
-    box-sizing: border-box;
-
-    &:focus {
-      border-color: #1677ff;
-    }
-  }
-
   /* 富文本工具栏（EditorBar）：不吃编辑区的高度，多高算多高 */
   .knowDetailBar {
     flex: none;
 
-    /* 详情面板比整页编辑器窄得多（默认 500px，最窄能拖到 300px），工具栏这二十多个按钮
+    /* 详情面板比整页编辑器窄得多（默认 600px，最窄能拖到 300px），工具栏这二十多个按钮
        一行摆不下。#editorBar 默认是 height:30px + overflow:hidden，直接照搬会把后面的按钮裁掉，
        所以这里放开让它换行——多占一两行也比按钮消失好 */
     #editorBar {

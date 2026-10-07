@@ -34,6 +34,7 @@ SQLite 的外键与级联删除全部失效，只能靠应用层保证完整性�
 但**由 `KnowNode` / `KnowLine` 各自持有 `detail_id` 外键指向 `KnowDetail`**：
 
 ```
+KnowList.detail_id → KnowDetail.id   -- 2026-10-07 加：知识本身也有一份详情
 KnowNode.detail_id → KnowDetail.id
 KnowLine.detail_id → KnowDetail.id
 ```
@@ -72,9 +73,12 @@ KnowLine.detail_id → KnowDetail.id
 CREATE TABLE IF NOT EXISTS know_list (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     name       TEXT    NOT NULL,
+    detail_id  INTEGER NOT NULL REFERENCES know_detail(id),  -- 知识本身也有一份详情（整体描述，2026-10-07 加）
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
+-- 后加的列：老库靠 Db::ensureColumn("know_list", "detail_id", "INTEGER NOT NULL DEFAULT 0") 补，
+-- 旧行是 0，取用时由 KnowList::ensureDetail() 补建一条挂上去。
 
 -- 知识详情（富文本内容，与节点/连线分离存放）
 CREATE TABLE IF NOT EXISTS know_detail (
@@ -93,7 +97,8 @@ CREATE TABLE IF NOT EXISTS know_node (
     x          REAL    NOT NULL DEFAULT 0,   -- 画布坐标（用户拖拽摆放）
     y          REAL    NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    color      INTEGER NOT NULL DEFAULT 0    -- 标记色：0 = 未着色，1..6（见下）
 );
 CREATE INDEX IF NOT EXISTS idx_node_list ON know_node(list_id);
 
@@ -105,11 +110,24 @@ CREATE TABLE IF NOT EXISTS know_line (
     detail_id  INTEGER NOT NULL REFERENCES know_detail(id),  -- 非空，默认 RESTRICT
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
+    color      INTEGER NOT NULL DEFAULT 0,   -- 标记色：0 = 未着色，1..6（见下）
     CHECK (node_a_id < node_b_id),           -- 无向边的唯一表示
     UNIQUE (node_a_id, node_b_id)            -- 两节点之间最多一条连线
 );
 CREATE INDEX IF NOT EXISTS idx_line_a ON know_line(node_a_id);
 CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);
+
+### 标记色 `color`（2026-10-07 加）
+
+`know_node` 与 `know_line` 都有一个 `color`：用户在右键菜单里挑的标记色。
+
+- **存的是索引，不是色值**：`0` = 未着色（节点白底、连线默认灰），`1..6` 对应六种固定颜色。
+  色值本身只存在于前端（`KnowNet.ts` 的 `MARK_COLORS`），与 C++ 侧的 `KnowNode::maxColor` /
+  `KnowLine::maxColor`（= 6）必须同步改——改一边要改另一边。
+- **渲染差异**：节点填充与连线描边都用该颜色本身，**都不加透明度**
+  （半透明的节点会把压在它下面的连线透出来，很难看）。
+- **旧库升级**：`CREATE TABLE IF NOT EXISTS` 对已存在的表不起作用，所以建表后各调一次
+  `Db::ensureColumn()`（`PRAGMA table_info` 查不到就 `ALTER TABLE ADD COLUMN`）补上这一列。
 
 -- 设置项（键值表，存放 UI 状态等持久化信息）
 CREATE TABLE IF NOT EXISTS setting (
@@ -126,7 +144,7 @@ CREATE TABLE IF NOT EXISTS setting (
 
 | key（草案） | value | 说明 |
 | --- | --- | --- |
-| `know_detail.pinned` | `0` / `1` | `KnowDetail` 面板是否处于钉住态（三列布局） |
+| ~~`know_detail.pinned`~~ | `0` / `1` | **已作废（2026-10-07）**：详情栏改成三栏布局的普通一栏，不再有钉住 / 悬浮之分，见 [31](./31-content-box.md) |
 | `know_list.width` | 像素值 | `KnowList` 面板宽度（splitter 拖动后的结果） |
 | `know_detail.width` | 像素值 | `KnowDetail` 面板宽度 |
 
@@ -145,7 +163,9 @@ CREATE TABLE IF NOT EXISTS setting (
 - **详情清理（已确定：应用层删除，不引触发器）**：删节点/连线/知识时在**表类的 `remove()` 里**
   先取回要清的 `detail_id`，删掉主体行之后再逐个删 `know_detail`（外键 CASCADE 方向是反的，数据库不会代劳）。
   - 删节点：先查出**它的所有连线的 `detail_id`**（连线会被外键级联删掉，详情要提前记下来），删节点后一并删详情。
-  - 删知识：先查出该知识下所有节点与连线的 `detail_id`，删知识后一并删详情。
+  - 删知识：先查出该知识下所有节点与连线的 `detail_id`，**外加它自己的 `detail_id`**，删知识后一并删详情。
+- **知识的详情可能缺失（老库）**：`detail_id` 是后加的列，老库里早先建的知识这一列是 0。
+  取用时走 `KnowList::ensureDetail(id)`——没有就补建一条挂上去，前端不必处理"知识没有详情"的分支。
 - **删除节点（已确定）**：连带删除**它的所有连线**，并删除**对应的 `KnowDetail` 记录**。
   连线本身由外键 `ON DELETE CASCADE` 自动清掉；详情需在表类里显式删除。
 

@@ -4,29 +4,33 @@ import CtrlBase from "../CtrlBase";
 import Msg from "../Msg";
 import EditorContent from "../EditorContent/EditorContent";
 import EditorBar from "../EditorBar/EditorBar";
-import KnowNet from "../KnowNet/KnowNet";
 
-/** 详情面板当前挂在谁身上：节点（标题 + 详情）或连线（只有详情） */
-type Target = { kind: "node" | "line"; id: number } | null;
+/**
+ * 详情面板当前挂在谁身上：
+ * - `node` / `line`：画布上选中的节点 / 连线（二者行为一致，都只是那份富文本）；
+ * - `list`：**知识本身**——没选中节点 / 连线时的落点，写的是这个知识整体的描述（2026-10-07 加）。
+ */
+type Target = { kind: "node" | "line" | "list"; id: number } | null;
 
-/** 标题的字符上限，与画布节点、数据库共用同一个值（Arch/33） */
-const TITLE_MAX_LENGTH = 36;
 /** 即时保存的防抖窗口：停手这么久才写库（Arch/33） */
 const SAVE_DELAY = 300;
-/** 钉住状态在 setting 表里的 key（Arch/31） */
-const PINNED_KEY = "know_detail.pinned";
 
 /**
  * 右侧详细内容面板（模块单例，见 Arch/33）。
  *
- * 同一个面板按点击对象换内容：点节点 = 标题 + 详情；点连线 = 只有详情（权重已删除）。
- * 编辑即存，不设保存按钮：改完停手 300ms 写一次库；切换对象、关面板、关窗口时把没落库的立刻 flush 掉。
+ * 同一个面板按点击对象换内容：点节点、点连线、点知识本身**行为完全一致**，都只是那份富文本详情
+ * （2026-10-07：详情里的标题输入框已移除——改标题只在画布上双击节点改，一处入口就够）。
+ * 编辑即存，不设保存按钮：改完停手 300ms 写一次库；切换对象、收面板、关窗口时把没落库的立刻 flush 掉。
  *
- * 两种形态（Arch/31）：默认**悬浮**在 ContentBox 右侧盖住画布，点右上角图钉按钮后**钉住**，
- * ContentBox 变成三列布局。钉住状态存 setting 表，下次打开还是那样。
+ * 它是**三栏布局的第三栏**（Arch/31）：与 KnowList、KnowNet 并排，拖它左边缘那条 splitter 调宽。
+ *
+ * **展开与否由用户说了算**（2026-10-07 改定）：选中节点 / 连线**不会**自动展开面板，
+ * 用户点右侧那个按钮才展开（默认收起）。展开期间切换对象，内容跟着换；收起时先把没落的写完。
  */
 class KnowDetail extends CtrlBase {
   private target: Target = null;
+  /** 面板现在是展开的还是收起的（默认收起，见上） */
+  private isOpen = false;
 
   /** 防抖定时器；0 = 没排着队 */
   private saveTimer = 0;
@@ -38,8 +42,6 @@ class KnowDetail extends CtrlBase {
   /** 程序化回填内容（切换对象时）：这期间的 contentChanged 不是用户在编辑 */
   private suppress = false;
 
-  private pinned = false;
-
   constructor() {
     super(html);
   }
@@ -50,8 +52,6 @@ class KnowDetail extends CtrlBase {
     // 直到用户敲一次键盘才有反应
     EditorBar.appendTo(this.dom.querySelector<HTMLElement>(".knowDetailBar")!);
     EditorContent.appendTo(this.dom.querySelector<HTMLElement>(".knowDetailEditor")!);
-    this.titleInput.addEventListener("input", () => this.onTitleInput());
-    this.dom.querySelector<HTMLElement>("#knowDetailPin")!.addEventListener("click", () => void this.togglePin());
     // 正文改动与失焦：前者排队入库，后者立刻落库（紧接着关窗的话不能等那 300ms）
     Msg.on("editorContentChanged", this.onContentChanged);
     Msg.on("editorBlur", () => this.flushSave());
@@ -59,38 +59,37 @@ class KnowDetail extends CtrlBase {
     // 面板本体上的点击不该穿透到画布（画布收到 click 会取消选中、把面板关掉）
     this.dom.addEventListener("click", (e) => e.stopPropagation());
     this.dom.addEventListener("contextmenu", (e) => e.stopPropagation());
-
-    void this.loadPinned();
   }
 
-  /** 点画布上的节点：显示它的标题 + 详情 */
-  async showNode(id: number, title: string): Promise<void> {
+  /** 选中画布上的节点：面板内容切到它的详情（改标题请双击画布上的节点） */
+  async showNode(id: number): Promise<void> {
     await this.switchTo({ kind: "node", id });
-    this.titleInput.value = title;
-    this.titleRow.style.display = "";
   }
 
-  /** 点连线：只有详情，没有标题 */
+  /** 选中连线：与节点完全一样 */
   async showLine(id: number): Promise<void> {
     await this.switchTo({ kind: "line", id });
-    this.titleRow.style.display = "none";
   }
 
   /**
-   * 画布上就地改了标题之后同步这里的标题框（同一份数据的两个入口）。
-   * 只有当前打开的正是这个节点才动；直接改 DOM 值，不再触发一轮入库（写库由画布那边做了）。
+   * 没选中节点 / 连线时：面板内容回到**这个知识本身**的描述。
+   * 传 null（没打开任何知识）就收起面板并清空。
    */
-  syncTitle(id: number, title: string): void {
-    if (this.target?.kind !== "node" || this.target.id !== id) return;
-    if (this.titleInput.value === title) return;
-    this.titleInput.value = title;
+  async showList(listId: number | null): Promise<void> {
+    if (listId == null) return void this.close();
+    await this.switchTo({ kind: "list", id: listId });
   }
 
-  /** 取消选中 / 关闭面板：先把没落的改动写完 */
+  /** 没有任何可显示的对象（没打开知识）：先把没落的改动写完，再收起面板 */
   close(): void {
     this.flushSave();
     this.target = null;
-    this.dom.classList.remove("show");
+    void this.setOpen(false);
+  }
+
+  /** 展开 / 收起这一栏：右侧那个按钮点的就是它（ContentBox 转发过来） */
+  toggle(): Promise<void> {
+    return this.setOpen(!this.isOpen);
   }
 
   /** 把还没落库的改动立刻写完并等它落地（关窗前调用，飞在半路的 IPC 会被掐断） */
@@ -103,66 +102,59 @@ class KnowDetail extends CtrlBase {
     this.saveTimer = 0;
   }
 
-  /** 当前是否处于钉住态（ContentBox 据此切换三列布局） */
-  get isPinned(): boolean {
-    return this.pinned;
+  /** 这一栏现在是展开的还是收起的（ContentBox 据此算画布要留住多少空间、按钮往哪贴） */
+  get isExpanded(): boolean {
+    return this.isOpen;
   }
 
-  private get titleInput(): HTMLInputElement {
-    return this.dom.querySelector<HTMLInputElement>("#knowDetailTitleInput")!;
+  /** 有没有可展开的东西：没打开任何知识时既没有节点也没有知识本身可显示 */
+  get canExpand(): boolean {
+    return this.target != null;
   }
 
-  private get titleRow(): HTMLElement {
-    return this.dom.querySelector<HTMLElement>(".knowDetailTitleRow")!;
+  /**
+   * 展开 / 收起这一栏。它是三栏里的普通一栏，收起时 display:none，画布自然吃掉这部分宽度。
+   * 状态要广播出去：ContentBox 据此把详情那条 splitter 与展开按钮重新贴到面板边缘。
+   * 收起前先把没落的改动写完（用户可能紧接着就切走 / 关窗），展开时才去取当前对象的内容。
+   */
+  private async setOpen(open: boolean): Promise<void> {
+    if (this.isOpen === open) return;
+    this.isOpen = open;
+    this.dom.classList.toggle("show", open);
+    Msg.emit("knowDetailExpanded", { expanded: open });
+    if (open) await this.load();
+    else this.flushSave();
   }
 
-  private async loadPinned(): Promise<void> {
-    try {
-      const value = (await Msg.invoke("setting.get", { key: PINNED_KEY, fallback: "0" })) as string;
-      this.setPinned(value === "1");
-    } catch {
-      this.setPinned(false); // 读不出来就按默认：悬浮
-    }
-  }
-
-  private async togglePin(): Promise<void> {
-    this.setPinned(!this.pinned);
-    // 写库失败无所谓：下次打开回到默认态而已，界面已经按用户点的那样变了
-    await Msg.invoke("setting.set", { key: PINNED_KEY, value: this.pinned ? "1" : "0" }).catch(() => {});
-  }
-
-  private setPinned(pinned: boolean): void {
-    this.pinned = pinned;
-    this.dom.classList.toggle("pinned", pinned);
-    this.dom.querySelector<HTMLElement>("#knowDetailPin")!.classList.toggle("on", pinned);
-    // 布局切换（三列 / 悬浮）由 ContentBox 负责，它监听这个事件重排 splitter
-    Msg.emit("knowDetailPinned", { pinned });
-  }
-
-  /** 换到另一个对象：先把上一个没落的改动落到它自己身上，再取新的详情 */
+  /** 换到另一个对象：先把上一个没落的改动落到它自己身上；面板正展开着就顺便把新内容取回来 */
   private async switchTo(target: Target): Promise<void> {
+    const unchanged = this.target?.kind === target.kind && this.target?.id === target.id;
+    const hadTarget = this.target != null;
     this.flushSave();
     this.target = target;
-    this.dom.classList.add("show");
+    // 可展开性变了（从"没有对象"到"有对象"，或反过来）：把手按钮的显隐要跟着更新
+    if (hadTarget !== (target != null)) Msg.emit("knowDetailExpanded", { expanded: this.isOpen });
+    // 同一个对象（比如重复点同一个节点）：别再取一遍，也别把用户正在敲的内容冲掉
+    if (unchanged || !this.isOpen) return;
+    await this.load();
+  }
 
+  /** 把当前对象的详情取回来填进编辑器；没有对象就清空 */
+  private async load(): Promise<void> {
+    const target = this.target;
     let content = "";
-    try {
-      content = (await Msg.invoke("detail.get", { target: target!.kind, id: target!.id })) as string;
-      // 请求是异步的：回来时用户可能已经点了别处，过期结果别往编辑器里塞
-      if (this.target !== target) return;
-    } catch {
-      content = "";
+    if (target) {
+      try {
+        content = (await Msg.invoke("detail.get", { target: target.kind, id: target.id })) as string;
+        // 请求是异步的：回来时用户可能已经点了别处，过期结果别往编辑器里塞
+        if (this.target !== target) return;
+      } catch {
+        content = "";
+      }
     }
     this.suppress = true;
     EditorContent.setContent(content ?? "");
     this.suppress = false;
-  }
-
-  /** 标题改动：按码点截到上限（maxlength 是按 UTF-16 算的，emoji 会被算成两个），再排队入库 */
-  private onTitleInput(): void {
-    const clipped = [...this.titleInput.value].slice(0, TITLE_MAX_LENGTH).join("");
-    if (clipped !== this.titleInput.value) this.titleInput.value = clipped;
-    this.scheduleSave();
   }
 
   private readonly onContentChanged = (): void => {
@@ -197,12 +189,7 @@ class KnowDetail extends CtrlBase {
     this.saving = true;
     this.dirty = false;
     try {
-      if (target.kind === "node") {
-        // 标题：空了就回落到「未命名」，与画布上新建节点的默认值一致（Arch/33）
-        const title = this.titleInput.value.trim() || "未命名";
-        await Msg.invoke("node.update", { id: target.id, title });
-        if (this.target === target) KnowNet.updateNodeTitle(target.id, title);
-      }
+      // 只有详情要存：标题归画布管（双击节点改，改完由 KnowNet 自己写库）
       await Msg.invoke("detail.save", { target: target.kind, id: target.id, content: EditorContent.content });
     } catch {
       // 写失败：下一轮改动还会再写一次，这里不打断用户

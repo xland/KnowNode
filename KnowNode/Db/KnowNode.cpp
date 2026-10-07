@@ -30,10 +30,13 @@ void KnowNode::create(sqlite3* conn)
         "    x          REAL    NOT NULL DEFAULT 0,"
         "    y          REAL    NOT NULL DEFAULT 0,"
         "    created_at INTEGER NOT NULL,"
-        "    updated_at INTEGER NOT NULL"
+        "    updated_at INTEGER NOT NULL,"
+        "    color      INTEGER NOT NULL DEFAULT 0"
         ");";
     Db::execOrFatal(conn, sql, L"创建 know_node 表失败");
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_node_list ON know_node(list_id);", L"创建 know_node 索引失败");
+    // 后加的字段：建表语句对已经存在的老库不起作用，靠这一句补上
+    Db::ensureColumn(conn, "know_node", "color", "INTEGER NOT NULL DEFAULT 0");
 }
 
 int64_t KnowNode::add(int64_t listId, double x, double y, const std::string& title)
@@ -85,6 +88,21 @@ bool KnowNode::move(int64_t id, double x, double y)
     return sqlite3_changes(Db::instance().conn()) > 0;
 }
 
+bool KnowNode::setColor(int64_t id, int color)
+{
+    if (color < 0) color = 0;
+    if (color > maxColor) color = maxColor;
+
+    DbStmt stmt{ Db::instance().conn(),
+        "UPDATE know_node SET color = ?, updated_at = ? WHERE id = ?;" };
+    if (!stmt.ok()) return false;
+    stmt.bindInt(1, color);
+    stmt.bindInt(2, Util::nowMillis());
+    stmt.bindInt(3, id);
+    stmt.run();
+    return sqlite3_changes(Db::instance().conn()) > 0;
+}
+
 bool KnowNode::remove(int64_t id)
 {
     sqlite3* conn = Db::instance().conn();
@@ -114,7 +132,7 @@ std::vector<KnowNodeItem> KnowNode::ofList(int64_t listId) const
 {
     std::vector<KnowNodeItem> items;
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, list_id, title, detail_id, x, y, created_at, updated_at"
+        "SELECT id, list_id, title, detail_id, x, y, created_at, updated_at, color"
         "  FROM know_node WHERE list_id = ? ORDER BY created_at, id;" };
     if (!stmt.ok()) return items;
     stmt.bindInt(1, listId);
@@ -129,6 +147,7 @@ std::vector<KnowNodeItem> KnowNode::ofList(int64_t listId) const
         item.y = stmt.columnDouble(5);
         item.createdAt = stmt.columnInt(6);
         item.updatedAt = stmt.columnInt(7);
+        item.color = static_cast<int>(stmt.columnInt(8));
         items.push_back(std::move(item));
     }
     return items;
@@ -137,7 +156,7 @@ std::vector<KnowNodeItem> KnowNode::ofList(int64_t listId) const
 bool KnowNode::get(int64_t id, KnowNodeItem& out) const
 {
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, list_id, title, detail_id, x, y, created_at, updated_at"
+        "SELECT id, list_id, title, detail_id, x, y, created_at, updated_at, color"
         "  FROM know_node WHERE id = ?;" };
     if (!stmt.ok()) return false;
     stmt.bindInt(1, id);

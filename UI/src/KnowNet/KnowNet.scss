@@ -13,6 +13,75 @@
     inset: 0;
   }
 
+  /* 顶部搜索框：浮在画布之上（画布是 inset: 0 且没有 z-index）。
+     默认藏着——只有加载了某个知识才由 JS 加 .show 放出来（没有知识时搜无可搜） */
+  .knowNetSearch {
+    position: absolute;
+    top: 8px;
+    left: 10px;
+    z-index: 4;
+    display: none;
+    align-items: center;
+    gap: 4px;
+    height: 26px;
+    padding: 0 6px 0 10px;
+    background: #fff;
+    border: 1px solid #e5e6eb;
+    border-radius: 3px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+
+    &.show {
+      display: flex;
+    }
+
+    .knowNetSearchInput {
+      width: 160px;
+      font-size: 12px;
+      color: #1f2329;
+      background: transparent;
+      border: none;
+      outline: none;
+
+      &::placeholder {
+        color: #c0c4cc;
+      }
+    }
+
+    .knowNetSearchBtn {
+      font-size: 14px;
+      color: #6b7280;
+      cursor: pointer;
+
+      &:hover {
+        color: #1677ff;
+      }
+    }
+  }
+
+  /* 搜不到时的提示：默认透明挂着，加上 .show 才浮出来，2 秒后由 JS 摘掉。
+     跟着搜索框走，就贴在它下面 */
+  .knowNetTip {
+    position: absolute;
+    top: 44px;
+    left: 10px;
+    z-index: 4;
+    padding: 4px 10px;
+    font-size: 12px;
+    color: #fff;
+    white-space: nowrap;
+    background: rgba(0, 0, 0, 0.7);
+    border-radius: 4px;
+    /* 纯提示，别挡住下面的画布：也不需要被选中 */
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.15s;
+
+    &.show {
+      opacity: 1;
+    }
+  }
+
   /* 双击节点改标题的输入框：位置与大小由 JS 按当前缩放算出来盖在节点上（默认藏着） */
   .knowNetTitleEdit {
     position: absolute;
@@ -23,37 +92,9 @@
     color: #1f2329;
     background: #fff;
     border: 2px solid #1677ff;
-    border-radius: 6px;
+    /* 与节点矩形的 NODE_RADIUS 一致：这个框是盖在节点上的，圆角不一样一眼就看出来 */
+    border-radius: 3px;
     outline: none;
     box-sizing: border-box;
-  }
-
-  /* 画布本身可平移（stage.draggable 由 Konva 处理），这里只让工具区浮在右上 */
-  .knowNetTools {
-    position: absolute;
-    right: 10px;
-    top: 8px;
-    z-index: 2;
-    display: flex;
-    gap: 6px;
-
-    .icon {
-      width: 24px;
-      height: 24px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 15px;
-      color: #6b7280;
-      background: #fff;
-      border: 1px solid #e5e6eb;
-      border-radius: 4px;
-      cursor: pointer;
-
-      &:hover {
-        color: #1677ff;
-        border-color: #1677ff;
-      }
-    }
   }
 }

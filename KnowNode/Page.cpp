@@ -40,6 +40,7 @@ namespace
         JsonObject o;
         o.SetNamedValue(L"id", num(static_cast<double>(item.id)));
         o.SetNamedValue(L"name", text(item.name));
+        o.SetNamedValue(L"detailId", num(static_cast<double>(item.detailId)));
         arr.Append(o);
     }
     void nodeJson(JsonArray& arr, const KnowNodeItem& item)
@@ -51,6 +52,7 @@ namespace
         o.SetNamedValue(L"detailId", num(static_cast<double>(item.detailId)));
         o.SetNamedValue(L"x", num(item.x));
         o.SetNamedValue(L"y", num(item.y));
+        o.SetNamedValue(L"color", num(item.color));
         arr.Append(o);
     }
     void lineJson(JsonArray& arr, const KnowLineItem& item)
@@ -60,12 +62,18 @@ namespace
         o.SetNamedValue(L"nodeAId", num(static_cast<double>(item.nodeAId)));
         o.SetNamedValue(L"nodeBId", num(static_cast<double>(item.nodeBId)));
         o.SetNamedValue(L"detailId", num(static_cast<double>(item.detailId)));
+        o.SetNamedValue(L"color", num(item.color));
         arr.Append(o);
     }
 
-    /// 节点 / 连线的详情 id：二者各自持有 detail_id，这里按 target 分派
+    /// 知识 / 节点 / 连线的详情 id：三者各自持有 detail_id，这里按 target 分派
     int64_t detailIdOf(const std::wstring& target, int64_t id)
     {
+        if (target == L"list")
+        {
+            // 老库的知识 detail_id 是 0（后加的列），ensureDetail 会顺手补一条
+            return KnowList::instance().ensureDetail(id);
+        }
         if (target == L"node")
         {
             KnowNodeItem item;
@@ -156,6 +164,12 @@ namespace
             { L"node.remove", [](Page*, const JsonObject& a, JsonObject& r) {
                 if (!KnowNode::instance().remove(Util::argNumber(a, L"id"))) { fail(r, L"删除节点失败"); return false; }
                 return false; } },
+            // 标记色：0 = 未着色，1..6 = 具体颜色；越界的值由表类夹到边界上
+            { L"node.color", [](Page*, const JsonObject& a, JsonObject& r) {
+                if (!KnowNode::instance().setColor(Util::argNumber(a, L"id"),
+                        static_cast<int>(Util::argNumber(a, L"color"))))
+                { fail(r, L"设置节点颜色失败"); return false; }
+                return false; } },
 
             // ---- 连线 line ----
             { L"line.list", [](Page*, const JsonObject& a, JsonObject& r) {
@@ -171,16 +185,21 @@ namespace
             { L"line.remove", [](Page*, const JsonObject& a, JsonObject& r) {
                 if (!KnowLine::instance().remove(Util::argNumber(a, L"id"))) { fail(r, L"删除关联失败"); return false; }
                 return false; } },
+            { L"line.color", [](Page*, const JsonObject& a, JsonObject& r) {
+                if (!KnowLine::instance().setColor(Util::argNumber(a, L"id"),
+                        static_cast<int>(Util::argNumber(a, L"color"))))
+                { fail(r, L"设置关联颜色失败"); return false; }
+                return false; } },
 
             // ---- 详情 detail ----
             { L"detail.get", [](Page*, const JsonObject& a, JsonObject& r) {
                 auto target = Util::argString(a, L"target");
-                if (target != L"node" && target != L"line") { fail(r, L"target 只能是 node 或 line"); return false; }
+                if (target != L"list" && target != L"node" && target != L"line") { fail(r, L"target 只能是 list、node 或 line"); return false; }
                 r.SetNamedValue(L"result", text(KnowDetail::instance().content(detailIdOf(target, Util::argNumber(a, L"id")))));
                 return false; } },
             { L"detail.save", [](Page*, const JsonObject& a, JsonObject& r) {
                 auto target = Util::argString(a, L"target");
-                if (target != L"node" && target != L"line") { fail(r, L"target 只能是 node 或 line"); return false; }
+                if (target != L"list" && target != L"node" && target != L"line") { fail(r, L"target 只能是 list、node 或 line"); return false; }
                 if (!KnowDetail::instance().save(detailIdOf(target, Util::argNumber(a, L"id")),
                         toUtf8(Util::argString(a, L"content"))))
                 { fail(r, L"保存详情失败"); return false; }

@@ -45,6 +45,12 @@ public:
     /// 各表类的 create() 一律走它，别自己拿 DbStmt 只判 ok()——那只代表 SQL 能编译，不代表执行过
     static void execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what);
 
+    /// 给已有的表补一列：列不存在才 ALTER TABLE ADD COLUMN，已存在就什么也不做。
+    ///
+    /// CREATE TABLE IF NOT EXISTS 对**已经存在**的表是一句空操作，后来加的字段不会自己长出来，
+    /// 老用户的 db.db 需要这一步才能升级。表类在 create() 末尾对后加的字段调它。
+    static void ensureColumn(sqlite3* conn, const char* table, const char* column, const char* definition);
+
     /// 取最近一次错误的文本（UTF-8）
     std::string lastError() const;
 

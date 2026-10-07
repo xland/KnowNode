@@ -18,7 +18,7 @@
 | [21-ipc.md](./21-ipc.md) | C++ ↔ 前端通信协议（`Page::onMsgReceived`）、产物加载 | 已记录 |
 | [30-frontend.md](./30-frontend.md) | 前端：`Msg.ts` 通信、三大布局组件、`WindowBorder` | 已记录 |
 | [31-content-box.md](./31-content-box.md) | 容器区：KnowList / KnowNet / KnowDetail，splitter 规则 | 已记录 |
-| [32-know-net.md](./32-know-net.md) | KnowNet 画布：节点、连线、手动拖拽摆放、缩放、一键整理 | 已记录（力导向仅作为按钮触发的一次性整理） |
+| [32-know-net.md](./32-know-net.md) | KnowNet 画布：节点、连线、手动拖拽摆放、缩放、框选与多选 | 已记录（力导向 / 一键整理已删除） |
 | [33-know-detail.md](./33-know-detail.md) | KnowDetail：节点（标题+详情）/ 连线（仅详情） | 已记录（权重已删除） |
 | [34-know-list.md](./34-know-list.md) | KnowList 面板：新建/重命名/删除知识 | 已记录 |
 | [40-data-model.md](./40-data-model.md) | 数据模型：know_list / know_node / know_line / know_detail / setting | 已记录（命名已定，SQL 草案待落地） |

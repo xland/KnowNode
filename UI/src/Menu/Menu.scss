@@ -26,9 +26,34 @@
     color: #1f2329;
     cursor: pointer;
     white-space: nowrap;
+    /* 色块 / 文字 / 右侧勾选图标：图标靠 margin-left:auto 顶到最右 */
+    display: flex;
+    align-items: center;
+    gap: 8px;
 
     &:hover {
       background: #e8ecf4;
+    }
+  }
+
+  /* 一行并排的颜色按钮（图标本身就是那个颜色） */
+  .menuColors {
+    display: flex;
+    gap: 6px;
+  }
+
+  .menuColorBtn {
+    font-size: 15px;
+    line-height: 1;
+    cursor: pointer;
+
+    /* 空圈（icon-uncheck）淡一点，勾（icon-check）才是实打实的颜色 */
+    &.icon-uncheck {
+      opacity: 0.55;
+    }
+
+    &:hover {
+      opacity: 1;
     }
   }
 }

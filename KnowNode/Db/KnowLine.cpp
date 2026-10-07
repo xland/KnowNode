@@ -30,6 +30,7 @@ void KnowLine::create(sqlite3* conn)
         "    detail_id  INTEGER NOT NULL REFERENCES know_detail(id),"
         "    created_at INTEGER NOT NULL,"
         "    updated_at INTEGER NOT NULL,"
+        "    color      INTEGER NOT NULL DEFAULT 0,"
         "    CHECK (node_a_id < node_b_id),"
         "    UNIQUE (node_a_id, node_b_id)"
         ");";
@@ -37,6 +38,8 @@ void KnowLine::create(sqlite3* conn)
 
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_a ON know_line(node_a_id);", L"创建 know_line 索引 idx_line_a 失败");
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);", L"创建 know_line 索引 idx_line_b 失败");
+    // 后加的字段：建表语句对已经存在的老库不起作用，靠这一句补上
+    Db::ensureColumn(conn, "know_line", "color", "INTEGER NOT NULL DEFAULT 0");
 }
 
 int64_t KnowLine::add(int64_t nodeAId, int64_t nodeBId)
@@ -98,11 +101,26 @@ bool KnowLine::remove(int64_t id)
     return true;
 }
 
+bool KnowLine::setColor(int64_t id, int color)
+{
+    if (color < 0) color = 0;
+    if (color > maxColor) color = maxColor;
+
+    DbStmt stmt{ Db::instance().conn(),
+        "UPDATE know_line SET color = ?, updated_at = ? WHERE id = ?;" };
+    if (!stmt.ok()) return false;
+    stmt.bindInt(1, color);
+    stmt.bindInt(2, Util::nowMillis());
+    stmt.bindInt(3, id);
+    stmt.run();
+    return sqlite3_changes(Db::instance().conn()) > 0;
+}
+
 std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
 {
     std::vector<KnowLineItem> items;
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT l.id, l.node_a_id, l.node_b_id, l.detail_id, l.created_at, l.updated_at"
+        "SELECT l.id, l.node_a_id, l.node_b_id, l.detail_id, l.created_at, l.updated_at, l.color"
         "  FROM know_line l"
         "  JOIN know_node n ON n.id = l.node_a_id"
         " WHERE n.list_id = ?"
@@ -118,6 +136,7 @@ std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
         item.detailId = stmt.columnInt(3);
         item.createdAt = stmt.columnInt(4);
         item.updatedAt = stmt.columnInt(5);
+        item.color = static_cast<int>(stmt.columnInt(6));
         items.push_back(std::move(item));
     }
     return items;
@@ -137,5 +156,6 @@ bool KnowLine::get(int64_t id, KnowLineItem& out) const
     out.detailId = stmt.columnInt(3);
     out.createdAt = stmt.columnInt(4);
     out.updatedAt = stmt.columnInt(5);
+    out.color = static_cast<int>(stmt.columnInt(6));
     return true;
 }

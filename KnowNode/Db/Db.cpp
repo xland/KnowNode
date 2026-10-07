@@ -55,6 +55,31 @@ void Db::execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what)
     }
 }
 
+void Db::ensureColumn(sqlite3* conn, const char* table, const char* column, const char* definition)
+{
+    // PRAGMA table_info 不接受参数绑定，表名是代码里的常量，直接拼进 SQL
+    std::string info = "PRAGMA table_info(";
+    info += table;
+    info += ");";
+    DbStmt stmt{ conn, info.c_str() };
+    while (stmt.step())
+    {
+        // table_info 的第 2 列是列名
+        if (stmt.columnText(1) == column) return;
+    }
+
+    std::string alter = "ALTER TABLE ";
+    alter += table;
+    alter += " ADD COLUMN ";
+    alter += column;
+    alter += " ";
+    alter += definition;
+    alter += ";";
+    auto what = std::wstring{ L"给表补字段失败\n\n表：" } + Util::convertToWStr(table)
+        + L"\n字段：" + Util::convertToWStr(column);
+    execOrFatal(conn, alter.c_str(), what);
+}
+
 std::string Db::lastError() const
 {
     auto msg = conn_ ? sqlite3_errmsg(conn_) : "no connection";

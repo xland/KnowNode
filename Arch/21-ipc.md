@@ -78,10 +78,12 @@ list.create    node.move    line.remove    detail.save    win.minimize
 | `node.update` | `{ id, title }` | 改节点标题 |
 | `node.move` | `{ id, x, y }` | 拖拽后保存坐标 |
 | `node.remove` | `{ id }` | 删除节点（连带删其连线与详情） |
+| `node.color` | `{ id, color }` | 改节点的标记色（0 = 未着色，1..6） |
 | `line.list` | `{ listId }` | 取该知识的全部连线 |
 | `line.create` | `{ nodeAId, nodeBId }` | 建连线（校验两端同属一个知识） |
 | `line.remove` | `{ id }` | 删除连线 |
-| `detail.get` | `{ target, id }` | 取详情，`target` = `node` / `line` |
+| `line.color` | `{ id, color }` | 改连线的标记色（0 = 未着色，1..6） |
+| `detail.get` | `{ target, id }` | 取详情，`target` = `list` / `node` / `line`（2026-10-07 起知识本身也有详情） |
 | `detail.save` | `{ target, id, content }` | 保存详情（前端防抖后调用） |
 | `setting.get` | `{ key }` | 读设置项 |
 | `setting.set` | `{ key, value }` | 写设置项 |

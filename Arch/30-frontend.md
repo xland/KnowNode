@@ -34,7 +34,18 @@
 
 | 组件 | 路径 | 职责 |
 | --- | --- | --- |
-| `WindowBorder` | `UI/src/WindowBorder/` | 窗口边框，**用于拖拽改变窗口大小**（无边框窗口的自绘 resize 热区） |
+| `WindowBorder` | `UI/src/WindowBorder/` | 窗口边框，**用于拖拽改变窗口大小**（无边框窗口的自绘 resize 热区）；**最大化时集体失效** |
+
+### WindowBorder：最大化时失效（**2026-10-07 定**）
+
+- 8 个触发区（四条边 + 四个角）只在**非最大化**时可用：最大化时窗口拖不动边框，
+  留着它们只会让光标在边缘变成调整大小的样式、点了却没反应。
+- 失效靠两道：CSS 摘掉 `pointer-events`（鼠标不再命中、光标也不再变），
+  `mousedown` 里再判断一次（免得将来改样式又把拖拽放出来）。
+- 状态来自 C++ 的 WM_SIZE 广播（`maximize` / `restore` 事件，与 `TitleBar` 那两个按钮同源）。
+  **初值按"已最大化"**：C++ 侧 `Window::show()` 用的是 `SW_SHOWMAXIMIZED`，一启动就是最大化。
+- C++ 的 `Window::hittest()` 再兜一道：命中值落在 `HTLEFT(10)..HTBOTTOMRIGHT(17)` 且 `IsZoomed`
+  时直接返回（`HTCAPTION` 拖动标题栏不受影响）。
 
 ## TitleBar 与 StatusBar（已确定）
 

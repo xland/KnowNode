@@ -20,4 +20,32 @@
   .splitter:hover {
     background: #bbbbbb;
   }
+
+  /* 详细内容的展开 / 收起按钮：贴着右边缘、垂直居中的一条小把手。
+     展开时由 JS 把它推到详情面板的左边缘（right = 面板宽度），图标换成 icon-expand-right */
+  #detailToggle {
+    position: absolute;
+    top: 50%;
+    right: 0;
+    transform: translateY(-50%);
+    z-index: 8;
+    width: 20px;
+    height: 44px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    color: #8a9099;
+    background: #fff;
+    border: 1px solid #e5e6eb;
+    border-right: none;
+    border-radius: 4px 0 0 4px;
+    cursor: pointer;
+    user-select: none;
+
+    &:hover {
+      color: #1677ff;
+      background: #e8ecf4;
+    }
+  }
 }

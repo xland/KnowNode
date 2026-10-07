@@ -25,21 +25,30 @@ void KnowList::create(sqlite3* conn)
         "CREATE TABLE IF NOT EXISTS know_list ("
         "    id         INTEGER PRIMARY KEY AUTOINCREMENT,"
         "    name       TEXT    NOT NULL,"
+        "    detail_id  INTEGER NOT NULL REFERENCES know_detail(id),"
         "    created_at INTEGER NOT NULL,"
         "    updated_at INTEGER NOT NULL"
         ");";
     Db::execOrFatal(conn, sql, L"创建 know_list 表失败");
+    // 后加的字段：建表语句对已经存在的老库不起作用，靠这一句补上
+    // （ALTER TABLE 不让带 REFERENCES，老库这一列只能是没有外键约束的普通列）
+    Db::ensureColumn(conn, "know_list", "detail_id", "INTEGER NOT NULL DEFAULT 0");
 }
 
 int64_t KnowList::add(const std::string& name)
 {
+    // 知识自己也有一份详情（整体描述），先建详情拿到 id，这条记录再指向它
+    auto detailId = KnowDetail::instance().add();
+    if (detailId == 0) return 0;
+
     auto now = Util::nowMillis();
     sqlite3* conn = Db::instance().conn();
-    DbStmt stmt{ conn, "INSERT INTO know_list (name, created_at, updated_at) VALUES (?, ?, ?);" };
+    DbStmt stmt{ conn, "INSERT INTO know_list (name, detail_id, created_at, updated_at) VALUES (?, ?, ?, ?);" };
     if (!stmt.ok()) return 0;
     stmt.bindText(1, name);
-    stmt.bindInt(2, now);
+    stmt.bindInt(2, detailId);
     stmt.bindInt(3, now);
+    stmt.bindInt(4, now);
     stmt.run();
     return sqlite3_last_insert_rowid(conn);
 }
@@ -61,8 +70,13 @@ bool KnowList::remove(int64_t id)
     sqlite3* conn = Db::instance().conn();
 
     // 删知识会级联删掉它的节点、连线，但那些节点/连线各自的 know_detail 行不会自动跟着走
-    // （外键是它们指向 detail，不是反过来），所以先记下要清理的 detail id
+    // （外键是它们指向 detail，不是反过来），所以先记下要清理的 detail id。
+    // 知识自己那份详情也在其中——它同样是指向 detail 的一方
     std::vector<int64_t> detailIds;
+    DbStmt self{ conn, "SELECT detail_id FROM know_list WHERE id = ?;" };
+    self.bindInt(1, id);
+    while (self.step()) detailIds.push_back(self.columnInt(0));
+
     DbStmt nodes{ conn, "SELECT detail_id FROM know_node WHERE list_id = ?;" };
     nodes.bindInt(1, id);
     while (nodes.step()) detailIds.push_back(nodes.columnInt(0));
@@ -88,30 +102,49 @@ std::vector<KnowListItem> KnowList::all() const
 {
     std::vector<KnowListItem> items;
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, name, created_at, updated_at FROM know_list ORDER BY created_at, id;" };
+        "SELECT id, name, detail_id, created_at, updated_at FROM know_list ORDER BY created_at, id;" };
     if (!stmt.ok()) return items;
     while (stmt.step())
     {
         KnowListItem item;
         item.id = stmt.columnInt(0);
         item.name = stmt.columnText(1);
-        item.createdAt = stmt.columnInt(2);
-        item.updatedAt = stmt.columnInt(3);
+        item.detailId = stmt.columnInt(2);
+        item.createdAt = stmt.columnInt(3);
+        item.updatedAt = stmt.columnInt(4);
         items.push_back(std::move(item));
     }
     return items;
 }
 
+int64_t KnowList::ensureDetail(int64_t id)
+{
+    KnowListItem item;
+    if (!get(id, item)) return 0;
+    if (item.detailId != 0) return item.detailId;
+
+    // detail_id 是后加的列，老库里早先建的知识这一列是 0：补一条详情挂上去
+    auto detailId = KnowDetail::instance().add();
+    if (detailId == 0) return 0;
+    DbStmt stmt{ Db::instance().conn(), "UPDATE know_list SET detail_id = ? WHERE id = ?;" };
+    if (!stmt.ok()) return 0;
+    stmt.bindInt(1, detailId);
+    stmt.bindInt(2, id);
+    stmt.run();
+    return sqlite3_changes(Db::instance().conn()) > 0 ? detailId : 0;
+}
+
 bool KnowList::get(int64_t id, KnowListItem& out) const
 {
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, name, created_at, updated_at FROM know_list WHERE id = ?;" };
+        "SELECT id, name, detail_id, created_at, updated_at FROM know_list WHERE id = ?;" };
     if (!stmt.ok()) return false;
     stmt.bindInt(1, id);
     if (!stmt.step()) return false;
     out.id = stmt.columnInt(0);
     out.name = stmt.columnText(1);
-    out.createdAt = stmt.columnInt(2);
-    out.updatedAt = stmt.columnInt(3);
+    out.detailId = stmt.columnInt(2);
+    out.createdAt = stmt.columnInt(3);
+    out.updatedAt = stmt.columnInt(4);
     return true;
 }
