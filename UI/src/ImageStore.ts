@@ -52,7 +52,10 @@ export async function saveImage(blob: Blob, ext: string): Promise<string> {
   const name = `img_${Date.now()}_${Math.random().toString(36).slice(2)}${ext}`;
   const fileHandle = await dir.getFileHandle(name, { create: true });
   const writable = await fileHandle.createWritable();
-  await writable.write(blob);
+  // 流式写而不是 write(blob)：边读边写，大图不必整个进内存再落盘。
+  // preventClose 让关闭仍走下面那句显式的 close——FileSystemWritableFileStream 的 close
+  // 带"提交落盘"的语义，显式留着比依赖 pipeTo 的隐式关闭更好读也更保险
+  await blob.stream().pipeTo(writable, { preventClose: true });
   await writable.close();
   return IMAGE_URL_PREFIX + name;
 }
@@ -61,11 +64,4 @@ export async function saveImage(blob: Blob, ext: string): Promise<string> {
  * 图片没有"缩放产物"这一说：用户拖拽改的只是 img 的显示尺寸（style 上的 width/height），
  * 原生不再按新尺寸另存一份图，正文从头到尾引用落盘时的那一份原图。
  * 老项目的 image.resize 与 ImageResizePlugin 因此删除（图片只落盘一次，目录里不攒缩放件）。
- */
-
-/**
- * 正文里的图一律以 https://app.localhost/images/<文件名> 的形态入库与传递：
- * 对方站点取不到这个地址，所以发布时由站点脚本在对方编辑页里向 native 要图片目录句柄，
- * 按文件名取出文件传对方的图床，拿到地址再换掉正文里的 src
- * （见 JS/WeiXin.js、JS/ZhiHu.js、JS/CSDN.js、JS/OSC.js）。
  */

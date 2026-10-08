@@ -13,9 +13,9 @@ interface KnowRow {
 }
 
 /**
- * 知识名称的字符上限。
- * 与节点标题取同一个值（见 Arch/33 的 36 字符规则，Arch/34 里这一条仍标着待确认）：
- * 按 Unicode 码点计数，输入框的 maxLength 本身就是按码点算的，不用另写校验。
+ * 知识名称的字符上限：**36，已落地**（2026-10-08 定，见 Arch/34）。
+ * 与 Arch/33 那条"节点标题 36 字符"取同一个值——但节点标题那条**至今没落地**，两回事。
+ * 按 Unicode 码点计数：输入框的 maxLength 本身就是按码点算的，不用另写校验。
  */
 const NAME_MAX_LENGTH = 36;
 
@@ -168,7 +168,7 @@ class KnowList extends CtrlBase {
   /**
    * 删除知识：库里删掉（连带它的节点与详情），再从列表里摘掉这一行。
    * 删的正是当前打开的那张网时，改选中剩下的第一行；一行都不剩就把画布清空。
-   * （问不问用户确认见 Arch/34 的待确认，这一版先直接删。）
+   * **不做二次确认**（2026-10-08 定，见 Arch/34）：点了就删，不弹框再问一遍。
    */
   private async remove(id: number, item: HTMLElement): Promise<void> {
     try {
