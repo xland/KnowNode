@@ -37,8 +37,11 @@
    （2026-10-06 实踩）：`DbStmt` 构造时只 `prepare`，`ok()` 只表示 SQL 能编译，**不代表执行过**。
    只 prepare 不 step 的 `CREATE TABLE` 等于没建，紧接着引用该表的 `CREATE INDEX` 会在 prepare 阶段
    报 `no such table`——表象是"创建 xxx 索引失败"，真因是表压根没建。
+5. **不做老库兼容（2026-10-08 定）**：项目尚未发布、没有既有用户数据，
+   **不支持已有的 `db.db`**。所有列一律写在 `CREATE TABLE` 里，`Db::ensureColumn()` 与
+   `KnowList::ensureDetail()` 已删除。真遇到旧 `db.db` 就删掉重建，不写任何升级/迁移代码。
 
-## 类结构草案（实现草案，待用户确认后落地）
+## 类结构（**已按此落地**，与 `KnowNode/Db/Db.h` 现状一致）
 
 ```cpp
 // Db/Db.h —— 数据库管理单例
@@ -52,12 +55,15 @@ public:
     void close();
 
     // 表类自注册入口：传表名 + 建表回调（回调内执行 CREATE TABLE IF NOT EXISTS ...）
-    void registerTable(std::string_view name, std::function<void(sqlite3*)> create);
+    void registerTable(std::string name, std::function<void(sqlite3*)> create);
+
+    // 建表 / 建索引：prepare + step，任一步失败就带 SQLite 的原因 fatal
+    static void execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what);
 
 private:
     Db() = default;                    // 单例：禁止外部构造
     sqlite3* conn_ = nullptr;
-    std::vector<Entry> tables_;        // 注册表，按注册顺序建表
+    std::vector<Table> tables_;        // 注册表，按注册顺序建表
 };
 ```
 
@@ -90,23 +96,21 @@ static DbTableRegistrar<KnowNode> g_knowNode;   // main() 之前完成注册
 > **已确认并落地**：自注册方案认可，代码已在 `KnowNode/Db/` 实现
 > （`Db.h` / `Db.cpp` + `KnowList` / `KnowNode` / `KnowLine` / `KnowDetail` / `Setting` 五个表类）。
 
-## 现状代码（含老项目痕迹，需按新约定改造）
+## 现状代码（**已按新约定落地**，2026-10-08 核对）
 
-`KnowNode/Db/Db.h` 目前是 `namespace Db` 的两个自由函数：
+> **本节原写的是老状态，已整段作废**：原文称 `Db.h` 里是 `namespace Db` 的两个自由函数
+> （`init()` / `get()`）、`Db.cpp` 里 `createSchema()` 为空——**这两条都不成立**。
+> 现在 `Db` 就是上面草案里那个**单例类**，建表由五个表类自注册，`createSchema()` 这个函数**根本不存在**。
 
-```cpp
-namespace Db
-{
-    void init();      // 打开数据目录下的 db.db，建表
-    sqlite3* get();   // 取连接，供表类执行 SQL
-}
-```
-
-- `Db.cpp` 中 `createSchema()` 当前为**空**——按新约定，未来的建表动作应由各表类提供，由 `Db::init()` 统一调用。
+- `Db` **是类、是单例**（`class Db { static Db& instance(); ... }`，拷贝构造与赋值已 `delete`），
+  **不是 `namespace Db`**。入口是 `Db::instance()`，取连接是 `Db::instance().conn()`。
+- 建表动作由五个表类（`KnowList` / `KnowNode` / `KnowLine` / `KnowDetail` / `Setting`）
+  在构造时注册，`Db::init()` 只遍历注册表；`Db` 里**没有任何硬编码的建表 SQL**。
+- 建表语句走 `Db::execOrFatal()`；**不支持老库升级**，所以没有、也不再需要 `ensureColumn()`
+  （见「已确定的设计决策」5）。
 - 已有实现细节（保留）：连接用 UTF-8 路径打开（避免中文用户名问题）、`PRAGMA foreign_keys = ON` 且读回校验。
-- 老项目残留，待清理：
-  - `migrateImageTable()`：旧库 `image` 表的 `img_path` 列改名对齐 `img_name`，注释自述"确认没人用旧库后可删除"。
-  - 注释中提到的 `Category` / `Article` 表及"写入测试数据"逻辑，属于旧项目的表结构，不纳入新架构。
+- 老项目的 `Category` / `Article` 表及"写入测试数据"逻辑**已不存在**；`migrateImageTable()` 也不存在
+  （没有 `image` 表，见下节）。
 
 ## 旧代码清理（**已确定**）
 
@@ -116,13 +120,16 @@ namespace Db
 - 表与迁移：`category` / `article` 表的建表与迁移逻辑。
 - 通信 method：`getImageDir` 之外的老 method 一律按 [21](./21-ipc.md) 的新命名重写。
 
-**保留**（`packages/` 不动；图片链条与老项目一致，见 [33-know-detail.md](./33-know-detail.md)）：
+**保留**（`packages/` 不动；图片链条见 [33-know-detail.md](./33-know-detail.md)）：
 
-- `UI/src/ImageStore.ts`、`UI/src/EditorContent/ImagePlugin.ts`、`ImageResize.ts`、`EditorBar/Image/`。
-- C++ 侧 `Page::handleGetImageDir`、数据目录下的 `images` 子目录、以及老 `image` 表（`img_name` 等）——
-  改为 `image.dir` 后继续用。**`Page::handleResizeImage` 已删除**（图片不再另存缩放图，见 [33](./33-know-detail.md)）。
-- `migrateImageTable()`：旧库 `image` 表的列改名迁移，对新库无副作用，**暂时保留**
-  （确认无人使用旧库后再删）。
+- `UI/src/ImageStore.ts`、`UI/src/EditorContent/ImagePlugin.ts`、`UI/src/EditorBar/Image/`。
+- C++ 侧 `Page::handleGetImageDir`（method 名 `image.dir`）与数据目录下的 `images` 子目录。
+
+> **「老 `image` 表」这条是错的，已删（2026-10-08 核对）**：库里只有
+> `know_list` / `know_node` / `know_line` / `know_detail` / `setting` **五张表**，
+> 既没有 `image` 表，也没有 `migrateImageTable()`——图片只落在 `images` 目录里，
+> 正文存文件名，**没有任何表记录"正文引用了哪些图片"**，前端 `ImageStore.ts` 也只调 `image.dir`。
+> 同段落里的 `Page::handleResizeImage`、`ImageResize.ts` 也已删除（图片不再另存缩放图）。
 
 ## 待确认问题
 

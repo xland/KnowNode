@@ -16,9 +16,27 @@
 | --- | --- |
 | `invoke(method, args)` | 调用原生方法，返回 Promise（请求-响应，带自增 id 配对） |
 | `invokeWithObjects(method, args)` | 同上，但 resolve `{ result, objects }`；`objects` 是原生用 `PostWebMessageAsJsonWithAdditionalObjects` 附带的对象（如 File System Access 目录句柄） |
-| `on / off / once / emit` | 事件订阅与派发，用于原生主动推送的事件（`msg.eventName`） |
+| `on / off / once / emit` | 事件订阅与派发：**既收原生推送的事件，也承载前端内部的事件**，两类共用这一条通道 |
 
 > 协议形态：请求 `{ id, method, args }` → 响应 `{ id, result | error }`；事件 `{ eventName, ... }`。
+> 事件**没有 `id`、没有回包**，是单向广播。
+
+### 事件清单（2026-10-08）
+
+`Msg` 这一条通道上跑着**两类事件**，写法一样但**来源不同**，别混为一谈：
+
+| eventName | 来源 | 发出方 | 订阅方 |
+| --- | --- | --- | --- |
+| `maximize` | **原生推送** | C++ `Window::wndProc` → `page->emit()` | `WindowBorder.ts`、`TitleBar.ts` |
+| `restore` | **原生推送** | 同上 | 同上 |
+| `editorState` | 前端内部 | `EditorContent/EditorPlugin.ts` | `EditorBar/` 各按钮、`ToolbarButton.ts` |
+| `editorContentChanged` | 前端内部 | `EditorPlugin.ts`、`EditorBar/Code/Code.ts` | `KnowDetail.ts`（防抖保存） |
+| `editorBlur` | 前端内部 | `EditorContent.ts`（`focusout`） | `KnowDetail.ts`（flush） |
+| `editCodeBlock` | 前端内部 | `EditorContent.ts` | `EditorBar/Code/Code.ts` |
+| `knowDetailExpanded` | 前端内部 | `KnowDetail.ts` | `ContentBox.ts`（重排 splitter 与把手按钮） |
+
+- **只有 `maximize` / `restore` 是 C++ 发出来的**，其余都在前端自己 `Msg.emit()` / `Msg.on()`，不跨语言。
+- 原生事件在 [21-ipc.md](./21-ipc.md)「事件推送」登记；method 清单也在那里。
 
 ## 界面布局
 
@@ -82,9 +100,11 @@
 
 ## 待确认问题
 
-- `CodeHighlight.ts`、`CtrlBase.ts`、`ImageStore.ts`、`ToolbarButton.ts` 等散件的用途梳理
-  （`ImageStore.ts` 已确认保留，见 [33](./33-know-detail.md)）。
-- 未选中节点时状态栏左侧显示「未选中节点」是否合意（已先按这个实现）。
+- ~~`CodeHighlight.ts`、`CtrlBase.ts`、`ImageStore.ts`、`ToolbarButton.ts` 等散件的用途梳理~~
+  —— **已明确（2026-10-08）**：`CtrlBase.ts` = 组件抽象基类；`ToolbarButton.ts` = 工具条按钮的
+  声明式封装（`createButton` + `ToolbarButton` 接口）；`CodeHighlight.ts` = shiki 代码高亮
+  （`highlightCode` / `CODE_LANGS`，给代码块用）；`ImageStore.ts` = 图片落盘（见 [33](./33-know-detail.md)）。
+- **未选中节点时状态栏左侧显示「未选中节点」是否合意**（已先按这个实现）—— 见 README F3。
 
 ## 已实现（2026-10-06）
 

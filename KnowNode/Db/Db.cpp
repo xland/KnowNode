@@ -18,8 +18,8 @@ void Db::init()
 {
     open();
     createTables();
-    // 外键放最后开：让建表这些一次性动作跑在跟升级前一样的环境里，
-    // 万一旧库还留着不合外键的历史数据也不会卡住。此后的正常读写都在约束之下
+    // 外键放最后开：建表这些一次性动作跑在没有约束的环境里，
+    // 免得建表顺序（先 know_list、后 know_detail）被外键卡住。此后的正常读写都在约束之下
     enableForeignKeys();
 }
 
@@ -37,11 +37,6 @@ void Db::registerTable(std::string name, std::function<void(sqlite3*)> create)
     tables_.push_back(Table{ std::move(name), std::move(create) });
 }
 
-bool Db::exec(const char* sql)
-{
-    return sqlite3_exec(conn_, sql, nullptr, nullptr, nullptr) == SQLITE_OK;
-}
-
 void Db::execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what)
 {
     DbStmt stmt{ conn, sql };
@@ -53,37 +48,6 @@ void Db::execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what)
             + L"\n\nSQL：" + Util::convertToWStr(sql);
         fatal(detail);
     }
-}
-
-void Db::ensureColumn(sqlite3* conn, const char* table, const char* column, const char* definition)
-{
-    // PRAGMA table_info 不接受参数绑定，表名是代码里的常量，直接拼进 SQL
-    std::string info = "PRAGMA table_info(";
-    info += table;
-    info += ");";
-    DbStmt stmt{ conn, info.c_str() };
-    while (stmt.step())
-    {
-        // table_info 的第 2 列是列名
-        if (stmt.columnText(1) == column) return;
-    }
-
-    std::string alter = "ALTER TABLE ";
-    alter += table;
-    alter += " ADD COLUMN ";
-    alter += column;
-    alter += " ";
-    alter += definition;
-    alter += ";";
-    auto what = std::wstring{ L"给表补字段失败\n\n表：" } + Util::convertToWStr(table)
-        + L"\n字段：" + Util::convertToWStr(column);
-    execOrFatal(conn, alter.c_str(), what);
-}
-
-std::string Db::lastError() const
-{
-    auto msg = conn_ ? sqlite3_errmsg(conn_) : "no connection";
-    return msg ? std::string(msg) : std::string();
 }
 
 void Db::fatal(const std::wstring& detail)

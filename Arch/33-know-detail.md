@@ -7,7 +7,8 @@
 > `EditorContent.appendTo(...)` **之前**——编辑区 `new Editor()` 的那一刻就广播第一帧 `editorState`，
 > 按钮的启用/点亮态全靠它；挂晚了会错过这帧，撤销/重做/移除链接会一直保持初始置灰，
 > 直到用户敲一次键盘才有反应。
-> 详情面板比整页编辑器窄（默认 500px，最窄能拖到 300px），所以 `#editorBar` 在面板里放开成
+> 详情面板比整页编辑器窄（**默认 600px**，最窄能拖到 300px——`KnowDetail.scss` 的 `width` / `min-width`，
+> 与 Arch/31 一致；这里的 500 是 2026-10-07 改定前的旧值，已更正），所以 `#editorBar` 在面板里放开成
 > **可换行**：照搬默认的 `height:30px + overflow:hidden` 会把后面那十几个按钮直接裁掉。
 
 ## 面板内容：由当前对象决定
@@ -41,16 +42,30 @@
 > 改标题**只有画布这一个入口**（双击节点就地改），详情面板里不再有第二个入口需要互相同步。
 > 于是**点节点与点连线时 KnowDetail 的行为完全一致**：都只是打开那份富文本详情。
 
-## 标题规则（已确定）
+## 标题规则（**部分未落地**，2026-10-08 核对）
 
-- **最大长度：36 个字符**（上限校验落在画布上的那个输入框里）。超出部分不允许继续输入（或截断）。
+- **最大长度：36 个字符**。超出部分不允许继续输入（或截断）。
+
+### 落地情况（重要：别照着文档找代码）
+
+| 对象 | 上限 | 落地情况 |
+| --- | --- | --- |
+| **知识名称** | 36 | **已落地**：`KnowList.ts` 的 `NAME_MAX_LENGTH = 36` 传给 `Dialog.prompt({ maxLength })`，`Dialog.ts` 把它写到 `input.maxLength`（不传时的默认值也是 36） |
+| **节点标题** | 36 | **未落地**：画布上那个输入框 `.knowNetTitleEdit` 是 `KnowNet.html` 里的**裸 `<input>`**，`beginTitleEdit()` 只设 `value` 与样式，**没有 `maxLength`**；`node.update` 与 `know_node.title` 也都不截断 |
+
+> 原文写"上限校验落在画布上的那个输入框里"——**那一处目前没有校验**。
+> 要补齐就在 `beginTitleEdit()` 里给 `input.maxLength` 赋值，并把常量与 `KnowList` 那份合并到一处。
 
 配套实现约定：
 
-- **按 Unicode 码点计数**（`[...str].length`），不用 `str.length`——否则 emoji、生僻字会被算成 2 个字符。
+- **按 Unicode 码点计数**：**不自己数**——`input.maxLength` 本身就是按码点算的，
+  所以已落地的那处没有 `[...str].length` 这类手写校验代码（写了反而多余）。
 - **单行显示**，标题内过滤换行符；节点高度固定。
-- **不允许纯空白**：trim 后为空时回退显示为「未命名」（与新建节点的默认值一致）。
-- 上限常量集中定义一处，输入框校验、画布渲染、数据库写入**共用同一个值**。
+- **不允许纯空白**：trim 后为空时回退显示为「未命名」——这条**已落地**
+  （`endTitleEdit()` 里 `value || DEFAULT_TITLE`，`Dialog.inputValue()` 也先 trim）。
+- ~~上限常量集中定义一处，输入框校验、画布渲染、数据库写入共用同一个值~~
+  —— **现实是两处**：`Dialog.ts` 的默认 36 与 `KnowList.ts` 的 `NAME_MAX_LENGTH`；
+  节点标题那一处则压根没有。要"共用同一个值"得先把它们合并。
 - 画布显示层另有**视觉截断**：节点宽度有上限，文字超出用省略号，悬停/选中时显示完整标题
   （字符上限防滥用，美观靠显示层保证）。
 
@@ -94,6 +109,14 @@
   `ImageEditPlugin` 写进 `style` 的 width/height）；原生**不再按新尺寸另存一份图**，
   正文从头到尾引用落盘时的那一份原图，目录里不攒缩放件。
   老项目的 `image.resize`、`Page::handleResizeImage`、`ImageResizePlugin` 因此删除。
-- **老 `image` 表保留**：记录正文引用了哪些图片（缩放时改指向、判断有无别处引用），逻辑不变。
+- **没有 `image` 表**（2026-10-08 核对）：数据层只有 `know_list` / `know_node` / `know_line` /
+  `know_detail` / `setting` 五张表，**不记录"正文引用了哪些图片"**——图片只落在 `images` 目录，
+  正文里存文件名，没有引用计数、没有别处引用的判断。
+
+## 待确认问题
+
+- **节点标题的 36 字符上限要不要补**：现在只有**知识名称**有这层校验，**画布上那个输入框没有**。
+  要补就在 `beginTitleEdit()` 里给 `input.maxLength` 赋值，并把常量与 `KnowList` 那份合并到一处
+  （见上文「标题规则」的落地情况表；README F4）。
 - **保留的前端代码**：`UI/src/ImageStore.ts`、`UI/src/EditorContent/ImagePlugin.ts`、
   `UI/src/EditorBar/Image/`（`ImageResize.ts` 已删，见上面的缩放）。

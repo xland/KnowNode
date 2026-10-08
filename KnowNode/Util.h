@@ -2,7 +2,6 @@
 #include <Windows.h>
 #include <vector>
 #include <string>
-#include <tuple>
 #include "SQLite/sqlite3.h"
 #include <winrt/Windows.Data.Json.h>
 #include <winrt/Windows.Foundation.Collections.h> // 提供 IMap::HasKey / IVector::Append 的定义，避免 C3779
@@ -15,7 +14,6 @@ public:
 	static std::wstring convertToWStr(const char* str);
 	/// convertToWStr 的反向：wide → UTF-8（IPC 进来的字符串要按 UTF-8 入库）
 	static std::string convertToStr(const wchar_t* str);
-	static std::tuple<void*, DWORD> getRes(const std::wstring& name);
 	/// 取 IPC 消息里的 args 对象；没有 args、或它不是对象时返回空对象（后续 HasKey 一律 false）
 	static JsonObject msgArgs(const JsonObject& param);
 	/// 取 args 里的字符串参数；缺失或类型不对时返回空串

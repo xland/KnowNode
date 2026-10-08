@@ -20,20 +20,6 @@ std::string Util::convertToStr(const wchar_t* str)
     WideCharToMultiByte(CP_UTF8, 0, str, -1, buffer.data(), count, nullptr, nullptr);
     return std::string(buffer.data(), buffer.size() - 1);
 }
-std::tuple<void*, DWORD> Util::getRes(const std::wstring& name)
-{
-    HRSRC hRes = FindResource(NULL, name.data(), RT_RCDATA);
-    if (!hRes) {
-        return std::make_tuple(nullptr, 0);
-    }
-    HGLOBAL hData = LoadResource(NULL, hRes);
-    if (!hData) {
-        return std::make_tuple(nullptr, 0);
-    }
-    void* pData = LockResource(hData);
-    DWORD size = SizeofResource(NULL, hRes);
-    return std::make_tuple(pData, size);
-}
 JsonObject Util::msgArgs(const JsonObject& param)
 {
     if (param.HasKey(L"args") && param.GetNamedValue(L"args").ValueType() == JsonValueType::Object)

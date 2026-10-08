@@ -63,17 +63,3 @@ void Setting::set(const std::string& key, const std::string& value)
     insert.bindInt(4, now);
     insert.run();
 }
-
-int64_t Setting::getInt(const std::string& key, int64_t fallback) const
-{
-    auto text = get(key);
-    if (text.empty()) return fallback;
-    try
-    {
-        return std::stoll(text);
-    }
-    catch (const std::exception&)
-    {
-        return fallback;
-    }
-}

@@ -24,14 +24,14 @@ KnowNode/
   Arch/        # 架构文档（本目录），唯一事实来源
   Doc/         # 设计资源
     logo.ico   # 应用图标（.ico），同时用于 exe 图标；用户已设计完成
-  KnowNode/    # C++ 代码（宿主 / 原生层），老项目残留需梳理
+  KnowNode/    # C++ 代码（宿主 / 原生层）—— **现行实现**：main.cpp / Window / Page / Db/ 五个表类
   UI/          # 前端代码
     public/    # 静态资源：logo.svg、iconfont.css、iconfont.woff2
     src/       # 前端源码（ts / scss / html）
     index.html
     vite.config.ts
   packages/    # 第三方包（WebView2 等），**用户已配置好，不要清理**
-  x64/         # 构建产物，老项目残留需梳理
+  x64/         # 构建产物（当前构建的输出目录），不是残留
   KnowNode.slnx
 ```
 
@@ -59,4 +59,7 @@ KnowNode/
   Debug / Release | x64 均已编译通过。
 
 ## 待确认问题
-- `packages/`、`x64/`、`KnowNode/` 中哪些是老项目残留、需要清理或重写。
+
+- ~~`packages/`、`x64/`、`KnowNode/` 中哪些是老项目残留、需要清理或重写~~
+  —— **已定（2026-10-08）**：`KnowNode/` 是**现行实现不是残留**（里面的「文章」相关残留已清理完）；
+  `packages/` 是第三方依赖、不动；`x64/` 与 `KnowNode/x64/` 是构建产物。

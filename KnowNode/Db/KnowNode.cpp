@@ -35,8 +35,6 @@ void KnowNode::create(sqlite3* conn)
         ");";
     Db::execOrFatal(conn, sql, L"创建 know_node 表失败");
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_node_list ON know_node(list_id);", L"创建 know_node 索引失败");
-    // 后加的字段：建表语句对已经存在的老库不起作用，靠这一句补上
-    Db::ensureColumn(conn, "know_node", "color", "INTEGER NOT NULL DEFAULT 0");
 }
 
 int64_t KnowNode::add(int64_t listId, double x, double y, const std::string& title)

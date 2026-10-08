@@ -38,8 +38,6 @@ void KnowLine::create(sqlite3* conn)
 
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_a ON know_line(node_a_id);", L"创建 know_line 索引 idx_line_a 失败");
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);", L"创建 know_line 索引 idx_line_b 失败");
-    // 后加的字段：建表语句对已经存在的老库不起作用，靠这一句补上
-    Db::ensureColumn(conn, "know_line", "color", "INTEGER NOT NULL DEFAULT 0");
 }
 
 int64_t KnowLine::add(int64_t nodeAId, int64_t nodeBId)

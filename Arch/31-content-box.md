@@ -8,9 +8,9 @@
 
 | 阶段 | 列布局 |
 | --- | --- |
-| 原项目 | 三列：文章分类 / 文章列表 / 文章编辑器 |
-| 迁移后（现状） | 文章分类已拿掉（**但没拿干净**，仍有残留代码需清理），剩：文章列表 / 文章编辑器 |
-| 目标形态 | 知识列表 / 知识节点网络画布 /（点击节点后展开）节点详细内容 |
+| 原项目（老项目） | 三列：文章分类 / 文章列表 / 文章编辑器 |
+| 现状（2026-10-08） | 三列：知识列表 `KnowList` / 知识节点网络画布 `KnowNet` / 知识节点详细内容 `KnowDetail`；**「文章」相关的组件与引用已全部删除** |
+| 目标形态 | **已达成**。唯一更正：详细内容**不是**"点击节点后自动展开"——2026-10-07 改定为由容器右边缘的把手按钮手动展开／收起（见下） |
 
 ## 面板命名（已确定）
 
@@ -93,15 +93,19 @@
         splitter         ▏= #detailToggle
 ```
 
-## 现状实现（可复用，但需泛化）
+## 现状实现（已泛化到三个 `Know*` 面板）
 
 `ContentBox.ts` / `.scss` / `.html` 中已有 splitter 机制：
 
 - `.splitter` 绝对定位（宽 4px，`cursor: ew-resize`），HTML 里用 `data-target` 指向它要拖动其右边缘的面板。
 - 拖拽用 `pointerdown` + `document` 上的 `pointermove/pointerup`，拖动时给 `body` 加 `splitter-dragging`。
-- 最小宽度写成 `ContentBox` 的静态常量，注释要求与各面板 scss 的 `min-width` 保持一致。
-- 现状代码里硬编码的是旧面板：`articleTitle`（最小 200）、`articleEditor`（最小 200），
-  且 `ContentBox.ts` 仍 `import` 并挂载 `ArticleTitle`、`ArticleEditor` —— **这正是"文章分类没拿干净"的残留**，需按新的三元素改造。
+- 最小宽度写成 `ContentBox` 的静态常量，注释要求与各面板 scss 的 `min-width` 保持一致
+  （`KNOW_LIST_MIN` / `KNOW_NET_MIN` / `KNOW_DETAIL_MIN` = 300 / 500 / 300）。
+- ~~现状代码里硬编码的是旧面板 `articleTitle`（最小 200）、`articleEditor`（最小 200），
+  且 `ContentBox.ts` 仍 `import` 并挂载 `ArticleTitle`、`ArticleEditor`~~
+  —— **已不成立（2026-10-08）**：`ContentBox.ts` 只 `import` 并挂载
+  `KnowList` / `KnowNet` / `KnowDetail`，旧面板名与旧 import 都已删除，
+  splitter 的 `data-target` 指向的也是这三个元素。
 
 ### 宽度（已确定）
 
@@ -117,9 +121,12 @@
 
 ## 待确认问题
 
-- **`KnowDetail` 的最小宽度**取值（默认 600 已定，最小值暂取 300）。
-- 「文章分类」残留代码需定位清理（已知 `ContentBox.ts` 引用 `ArticleTitle` / `ArticleEditor`），
-  处置原则见 [20-data-layer.md](./20-data-layer.md)「旧代码清理」。
+- ~~`KnowDetail` 的最小宽度取值~~ —— **已定（2026-10-08）**：**最小 300px**（默认 600px）。
+  代码里就是这两个值：`KnowDetail.scss` 的 `width: 600px` / `min-width: 300px`，
+  `ContentBox.ts` 的 `KNOW_DETAIL_MIN = 300` 用于拖拽钳制，二者保持一致。
+- ~~「文章分类」残留代码需定位清理（已知 `ContentBox.ts` 引用 `ArticleTitle` / `ArticleEditor`）~~
+  —— **已清理完（2026-10-08）**：`UI/src/ArticleEditor/`、`ArticleTitle/`、`EditorTitle/` 三个目录已删，
+  `ContentBox.ts` 不再引用它们。
 
 > 已确定：一个节点只属于一个知识、连线不跨知识；点击列表项即加载该知识的节点；
 > `KnowList` 的增删改见 [34-know-list.md](./34-know-list.md)。

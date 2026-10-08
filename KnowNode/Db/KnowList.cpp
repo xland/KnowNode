@@ -30,9 +30,6 @@ void KnowList::create(sqlite3* conn)
         "    updated_at INTEGER NOT NULL"
         ");";
     Db::execOrFatal(conn, sql, L"创建 know_list 表失败");
-    // 后加的字段：建表语句对已经存在的老库不起作用，靠这一句补上
-    // （ALTER TABLE 不让带 REFERENCES，老库这一列只能是没有外键约束的普通列）
-    Db::ensureColumn(conn, "know_list", "detail_id", "INTEGER NOT NULL DEFAULT 0");
 }
 
 int64_t KnowList::add(const std::string& name)
@@ -115,23 +112,6 @@ std::vector<KnowListItem> KnowList::all() const
         items.push_back(std::move(item));
     }
     return items;
-}
-
-int64_t KnowList::ensureDetail(int64_t id)
-{
-    KnowListItem item;
-    if (!get(id, item)) return 0;
-    if (item.detailId != 0) return item.detailId;
-
-    // detail_id 是后加的列，老库里早先建的知识这一列是 0：补一条详情挂上去
-    auto detailId = KnowDetail::instance().add();
-    if (detailId == 0) return 0;
-    DbStmt stmt{ Db::instance().conn(), "UPDATE know_list SET detail_id = ? WHERE id = ?;" };
-    if (!stmt.ok()) return 0;
-    stmt.bindInt(1, detailId);
-    stmt.bindInt(2, id);
-    stmt.run();
-    return sqlite3_changes(Db::instance().conn()) > 0 ? detailId : 0;
 }
 
 bool KnowList::get(int64_t id, KnowListItem& out) const

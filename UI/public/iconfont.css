@@ -1,6 +1,6 @@
 @font-face {
   font-family: "icon"; /* Project id 5240521 */
-  src: url('iconfont.woff2?t=1791360309651') format('woff2');
+  src: url('iconfont.woff2?t=1791427153597') format('woff2');
 }
 
 .icon {
@@ -9,6 +9,10 @@
   font-style: normal;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.icon-center:before {
+  content: "\eb4e";
 }
 
 .icon-search:before {

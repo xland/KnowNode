@@ -41,6 +41,18 @@ function darken(hex: string, ratio: number): string {
 }
 
 /**
+ * 把 #rrggbb 往白色方向掺（ratio = 掺进去的白占多少：0 = 原色，1 = 纯白），与 darken() 对称。
+ * 节点背景要淡但**不能半透明**：节点背后压着连线，用 rgba 降透明度会把线透出来，所以是掺白不是降 alpha。
+ */
+function lighten(hex: string, ratio: number): string {
+  const m = /^#([0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  const value = parseInt(m[1], 16);
+  const channel = (n: number) => Math.round(n + (255 - n) * ratio);
+  return `rgb(${channel((value >> 16) & 255)}, ${channel((value >> 8) & 255)}, ${channel(value & 255)})`;
+}
+
+/**
  * 节点矩形的尺寸参数（Arch/32 里标着待确认，这里先取一组能用的值，集中在一处方便调）。
  * NODE_MIN_WIDTH / NODE_MAX_WIDTH 之外的部分靠文字省略号处理。
  */
@@ -52,6 +64,14 @@ const NODE_FONT_SIZE = 13;
 const NODE_RADIUS = 3;
 /** 节点边框粗细：选中与否都用这个值，两种状态只靠颜色区分 */
 const NODE_STROKE_WIDTH = 1;
+/** 未着色节点的边框色（与未着色时"白底"配成一组默认的灰框） */
+const NODE_STROKE_DEFAULT = "#d9dde3";
+/**
+ * 节点背景掺多少白（0 = 标记色原色，1 = 纯白）。
+ * 标记色这套值是照着"连线"挑的饱和度，铺满整个节点太沉、也压住文字，
+ * 所以背景往白里掺这么多再用；认色主要交给边框（nodeStroke 用原色）。
+ */
+const NODE_FILL_LIGHTEN = 0.75;
 
 /** 缩放范围与步长（上下限同样待确认，先取常用的一组） */
 const SCALE_MIN = 0.2;
@@ -87,9 +107,11 @@ const TIP_DURATION = 2000;
  *
  * 已做到：加载并渲染节点与连线、拖拽移动并入库、单击选中（通知 KnowDetail 与 StatusBar）、
  * 空白处点击取消选中、滚轮缩放、空白处拖拽平移、
- * 双击就地改标题、选中节点右侧「+」按钮与 Tab 新建关联节点、顶部搜索框定位节点。
- * （右上角原本还有「展示全部」与「一键整理布局」两个按钮，2026-10-07 都删掉了：
- * 缩放与平移用滚轮 / 拖拽就够了，整理则会把用户自己摆好的位置冲掉。）
+ * 双击就地改标题、选中节点右侧「+」按钮与 Tab 新建关联节点、顶部搜索框定位节点、
+ * 右上角「回到中心」按钮（画布被拖到偏远角落时把节点整体挪回视口正中）。
+ * （右上角原本还有「展示全部」与「一键整理布局」两个按钮，2026-10-07 都删掉了。
+ * 「回到中心」2026-10-08 加的是另一回事：它只挪视口，既不碰节点坐标也不改缩放，
+ * 不会把用户自己摆好的位置冲掉——那正是「一键整理」被删掉的原因。）
  */
 class KnowNet extends CtrlBase {
   private stage: Konva.Stage | null = null;
@@ -231,6 +253,8 @@ class KnowNet extends CtrlBase {
     this.dom.querySelector<HTMLElement>(".knowNetSearchBtn")!.addEventListener("click", () => {
       this.searchNode(searchInput.value);
     });
+    // 右上角「回到中心」：画布被拖到偏远角落时靠它找回来（见 centerView）
+    this.centerBtn.addEventListener("click", () => this.centerView());
 
     // 标题输入框：回车 / 失焦 = 提交，Esc = 放弃，Tab = 提交并接着建下一个关联节点。
     // 按键不外传，免得画布的快捷键（Tab / Delete）收到
@@ -270,6 +294,7 @@ class KnowNet extends CtrlBase {
     void this.endTitleEdit(true); // 换一张网之前把正在改的标题落库
     this.listId = listId;
     this.searchBox.classList.add("show"); // 有知识可搜了才把搜索框放出来
+    this.centerBtn.classList.add("show"); // 同理：有节点才谈得上「回到中心」
     this.selectNode(null);
     // 换知识：面板内容切到这个知识本身（选中集合没变时 selectNode(null) 会提前返回，所以这里显式切一次）
     void KnowDetail.showList(listId);
@@ -324,6 +349,7 @@ class KnowNet extends CtrlBase {
     this.selectNode(null);
     // 知识都没了：搜索框收起来（搜无可搜），上一次的搜索词与提示也一并清掉
     this.searchBox.classList.remove("show");
+    this.centerBtn.classList.remove("show");
     this.searchInput.value = "";
     this.hideTip();
     void KnowDetail.showList(null); // 没有知识了：面板没有可显示的对象，收起
@@ -404,7 +430,7 @@ class KnowNet extends CtrlBase {
       width,
       height: NODE_HEIGHT,
       fill: this.nodeFill(node.color ?? 0),
-      stroke: "#d9dde3",
+      stroke: this.nodeStroke(node.color ?? 0, false), // 刚建出来的节点不可能是选中态
       strokeWidth: NODE_STROKE_WIDTH,
       cornerRadius: NODE_RADIUS,
       shadowColor: "#000",
@@ -625,10 +651,24 @@ class KnowNet extends CtrlBase {
     return `${a} ↔ ${b}`;
   }
 
-  /** 节点矩形的填充色：没标记是白的，标记了用该颜色本身——**不加透明度**，
-   *  否则后面压着的连线会从节点里透出来，很难看 */
+  /**
+   * 节点矩形的填充色：没标记是白的；标记了用该标记色**往白里掺过一档**的淡色（NODE_FILL_LIGHTEN）。
+   * 标记色原色是照着连线挑的饱和度，铺满整个节点太沉、也压住上面的文字。
+   * 注意是"掺白"而不是"降透明度"——半透明的底色会把背后压着的连线透出来。
+   * 认色主要交给边框（nodeStroke 用原色），背景只负责让同类节点一眼归成一堆。
+   */
   private nodeFill(color: number): string {
-    return MARK_COLORS[color - 1] ?? "#ffffff";
+    const hex = MARK_COLORS[color - 1];
+    return hex ? lighten(hex, NODE_FILL_LIGHTEN) : "#ffffff";
+  }
+
+  /**
+   * 节点边框色：标记了用标记色**原色**（背景已经淡了，边框负责让人一眼认出是哪一种），
+   * 没标记用默认灰；选中一律蓝框——选中是更强的信号，盖过标记色（与 lineStroke 一个套路）。
+   */
+  private nodeStroke(color: number, selected: boolean): string {
+    if (selected) return "#1677ff";
+    return MARK_COLORS[color - 1] ?? NODE_STROKE_DEFAULT;
   }
 
   /**
@@ -641,12 +681,13 @@ class KnowNet extends CtrlBase {
     return selected ? darken(hex, 0.75) : hex;
   }
 
-  /** 按当前标记色重画节点的填充（边框与选中态归 setHighlight 管） */
+  /** 按当前标记色重画节点的填充与边框（边框带标记色，所以改标记色时要跟着换；选中态一起算） */
   private paintNode(id: number): void {
     const node = this.nodes.find((n) => n.id === id);
     const rect = this.groups.get(id)?.findOne<Konva.Rect>("Rect");
     if (!node || !rect) return;
     rect.fill(this.nodeFill(node.color ?? 0));
+    rect.stroke(this.nodeStroke(node.color ?? 0, this.selectedNodes.has(id)));
     this.nodeLayer?.batchDraw();
   }
 
@@ -696,7 +737,8 @@ class KnowNet extends CtrlBase {
     const rect = group?.findOne<Konva.Rect>("Rect");
     if (!group || !rect) return;
     // 选中与否只换颜色，不换粗细：两种状态都是 1px（2026-10-07 改定）
-    rect.stroke(on ? "#1677ff" : "#d9dde3");
+    const node = this.nodes.find((n) => n.id === id);
+    rect.stroke(this.nodeStroke(node?.color ?? 0, on));
     rect.strokeWidth(NODE_STROKE_WIDTH);
     // 「+」按钮只属于单选的那一个节点：多选时谁都不带（它会作用于"当前选中的那个"，
     // 而多选没有"那一个"）；拉线时高亮别的节点也不该把它的按钮带出来
@@ -1226,6 +1268,10 @@ class KnowNet extends CtrlBase {
     return this.dom.querySelector<HTMLElement>(".knowNetTip")!;
   }
 
+  private get centerBtn(): HTMLElement {
+    return this.dom.querySelector<HTMLElement>(".knowNetCenter")!;
+  }
+
   /**
    * 按标题搜节点：命中**第一个**（`nodes` 的顺序就是库里取出来的顺序）就把它挪到视口正中并选中；
    * 一个都没命中就浮一条提示。空输入不算搜索——那等于什么条件都没给。
@@ -1273,6 +1319,47 @@ class KnowNet extends CtrlBase {
     if (!this.stage) return;
     this.stage.scale({ x: 1, y: 1 });
     this.stage.position({ x: this.stage.width() / 2, y: this.stage.height() / 2 });
+  }
+
+  /**
+   * 回到中心（右上角那个按钮）：把全部节点的包围盒中心重新对回视口正中，**只挪位置、缩放不动**——
+   * 迷路是平移造成的，缩放是用户自己调的，别顺手给人改回去。
+   *
+   * 这里不复用 centerOrigin：那个是把**原点**摆到正中，只在打开知识时用。节点完全可能被摆到离原点
+   * 很远的地方（平移之后新建的节点，坐标就落在当时视口中心对应的画布位置上），那种情况下回原点是
+   * 找不回来的。一个节点都没有时才退化成原点居中。
+   */
+  private centerView(): void {
+    const stage = this.stage;
+    if (!stage) return;
+    const scale = stage.scaleX();
+    const box = this.nodesBox();
+    const cx = box ? (box.minX + box.maxX) / 2 : 0;
+    const cy = box ? (box.minY + box.maxY) / 2 : 0;
+    stage.position({ x: stage.width() / 2 - cx * scale, y: stage.height() / 2 - cy * scale });
+  }
+
+  /**
+   * 全部节点的包围盒；一个节点都没有时返回 null。
+   * 坐标取 Group 的实时位置（拖动途中还没写回 nodes 的也算），回退到数据里的 x / y。
+   */
+  private nodesBox(): { minX: number; minY: number; maxX: number; maxY: number } | null {
+    if (!this.nodes.length) return null;
+    let minX = Infinity;
+    let minY = Infinity;
+    let maxX = -Infinity;
+    let maxY = -Infinity;
+    for (const node of this.nodes) {
+      // 节点坐标是矩形中心（见类注释）。这里直接拿中心点算包围盒，不减半宽半高：
+      // 差的那几十像素不影响"把内容找回来"，而节点宽度要等渲染时按文字量出来
+      const x = this.groups.get(node.id)?.x() ?? node.x;
+      const y = this.groups.get(node.id)?.y() ?? node.y;
+      minX = Math.min(minX, x);
+      minY = Math.min(minY, y);
+      maxX = Math.max(maxX, x);
+      maxY = Math.max(maxY, y);
+    }
+    return { minX, minY, maxX, maxY };
   }
 
   /**

@@ -39,12 +39,6 @@ public:
     /// 取单个知识；找不到返回 false
     bool get(int64_t id, KnowListItem& out) const;
 
-    /**
-     * 这条知识的详情 id：没有就补建一条挂上去（老库的 detail_id 是后加的列，旧行是 0）。
-     * 返回 0 表示失败（知识不存在或建详情失败）。
-     */
-    int64_t ensureDetail(int64_t id);
-
 private:
     KnowList();
 };

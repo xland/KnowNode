@@ -77,8 +77,6 @@ CREATE TABLE IF NOT EXISTS know_list (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
--- 后加的列：老库靠 Db::ensureColumn("know_list", "detail_id", "INTEGER NOT NULL DEFAULT 0") 补，
--- 旧行是 0，取用时由 KnowList::ensureDetail() 补建一条挂上去。
 
 -- 知识详情（富文本内容，与节点/连线分离存放）
 CREATE TABLE IF NOT EXISTS know_detail (
@@ -126,8 +124,8 @@ CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);
   `KnowLine::maxColor`（= 6）必须同步改——改一边要改另一边。
 - **渲染差异**：节点填充与连线描边都用该颜色本身，**都不加透明度**
   （半透明的节点会把压在它下面的连线透出来，很难看）。
-- **旧库升级**：`CREATE TABLE IF NOT EXISTS` 对已存在的表不起作用，所以建表后各调一次
-  `Db::ensureColumn()`（`PRAGMA table_info` 查不到就 `ALTER TABLE ADD COLUMN`）补上这一列。
+- **不做旧库升级（2026-10-08 定）**：项目尚未发布、没有既有用户数据，**不支持已有的 `db.db`**。
+  `color` 从一开始就在 `CREATE TABLE` 里，没有"建表后再补一列"这一步，`Db::ensureColumn()` 已删除。
 
 -- 设置项（键值表，存放 UI 状态等持久化信息）
 CREATE TABLE IF NOT EXISTS setting (
@@ -164,8 +162,9 @@ CREATE TABLE IF NOT EXISTS setting (
   先取回要清的 `detail_id`，删掉主体行之后再逐个删 `know_detail`（外键 CASCADE 方向是反的，数据库不会代劳）。
   - 删节点：先查出**它的所有连线的 `detail_id`**（连线会被外键级联删掉，详情要提前记下来），删节点后一并删详情。
   - 删知识：先查出该知识下所有节点与连线的 `detail_id`，**外加它自己的 `detail_id`**，删知识后一并删详情。
-- **知识的详情可能缺失（老库）**：`detail_id` 是后加的列，老库里早先建的知识这一列是 0。
-  取用时走 `KnowList::ensureDetail(id)`——没有就补建一条挂上去，前端不必处理"知识没有详情"的分支。
+- **知识必定有详情**：`detail_id` 是建表时就有的 `NOT NULL` 列，`KnowList::add()` 先建详情再插行，
+  取用时直接读 `detail_id` 即可，前端不必处理"知识没有详情"的分支。
+  （2026-10-08：`KnowList::ensureDetail()` 随老库兼容一并删除——原本它只为"老库这一列是 0"而存在。）
 - **删除节点（已确定）**：连带删除**它的所有连线**，并删除**对应的 `KnowDetail` 记录**。
   连线本身由外键 `ON DELETE CASCADE` 自动清掉；详情需在表类里显式删除。
 

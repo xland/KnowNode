@@ -1,7 +1,6 @@
 #include "Env.h"
 #include "Page.h"
 #include "Window.h"
-#include "Db/Db.h"
 #include "Db/KnowDetail.h"
 #include "Db/KnowLine.h"
 #include "Db/KnowList.h"
@@ -13,7 +12,6 @@
 #include <filesystem>
 #include <functional>
 #include <map>
-#include <thread>
 
 namespace
 {
@@ -71,8 +69,8 @@ namespace
     {
         if (target == L"list")
         {
-            // 老库的知识 detail_id 是 0（后加的列），ensureDetail 会顺手补一条
-            return KnowList::instance().ensureDetail(id);
+            KnowListItem item;
+            return KnowList::instance().get(id, item) ? item.detailId : 0;
         }
         if (target == L"node")
         {
@@ -236,11 +234,6 @@ Page::Page(Window* win, ComPtr<ICoreWebView2>& webview) :win{ win }, webview{ we
     auto reqPermissionCB = Callback<ICoreWebView2PermissionRequestedEventHandler>(this, &Page::onRequestPermission);
     webview->add_PermissionRequested(reqPermissionCB.Get(), nullptr);
 
-    ComPtr<ICoreWebView2_2> webview2;
-    this->webview.As(&webview2);
-    auto domLoadedCB = Callback<ICoreWebView2DOMContentLoadedEventHandler>(this, &Page::onDomLoaded);
-    webview2->add_DOMContentLoaded(domLoadedCB.Get(), nullptr);
-
     auto closeWindowCB = Callback<ICoreWebView2WindowCloseRequestedEventHandler>(this, &Page::onCloseWindow);
     webview->add_WindowCloseRequested(closeWindowCB.Get(), nullptr);
 
@@ -308,11 +301,6 @@ HRESULT Page::onMsgReceived(ICoreWebView2* webview, ICoreWebView2WebMessageRecei
 HRESULT Page::onCloseWindow(ICoreWebView2* sender, IUnknown* args)
 {
     PostMessage(win->hwnd, WM_CLOSE, 0, 0);
-    return S_OK;
-}
-
-HRESULT Page::onDomLoaded(ICoreWebView2* sender, ICoreWebView2DOMContentLoadedEventArgs* args)
-{
     return S_OK;
 }
 
@@ -446,57 +434,3 @@ void Page::handleGetImageDir(JsonObject& result)
     webview->PostWebMessageAsJson(json.c_str());
 }
 
-void Page::postJson(const std::wstring& json)
-{
-    webview->PostWebMessageAsJson(json.c_str());
-}
-
-namespace
-{
-    /**
-     * 这个图片文件还有没有文章在引用：数 image 表里 is_delete = 0 的记录（见 Db/Image.h）。
-     *
-     * 注意记录是滞后的：正文拖完还没入库时，库里那行写的仍是旧文件。所以调用方要先调
-     * Image::renameReferences 把旧文件的记录改指到新产物上，再来问这一句——否则当前这篇
-     * 自己的滞后记录会把要清理的文件一直保着。
-     * 查不到（库没开）时按"有人引用"处理：宁可留一份垃圾文件，也别把别处正文里的图删成裂图
-     */
-    bool stillReferenced(const std::wstring& imageName)
-    {
-        sqlite3* conn = Db::instance().conn();
-        if (!conn) return true;
-        int count = 0;
-        static const char* sql = "SELECT COUNT(*) FROM image WHERE img_name = ?1 AND is_delete = 0;";
-        if (sqlite3_stmt* stmt = nullptr; sqlite3_prepare_v2(conn, sql, -1, &stmt, nullptr) == SQLITE_OK)
-        {
-            sqlite3_bind_text16(stmt, 1, imageName.c_str(), -1, SQLITE_TRANSIENT);
-            if (sqlite3_step(stmt) == SQLITE_ROW) count = sqlite3_column_int(stmt, 0);
-            sqlite3_finalize(stmt);
-        }
-        return count > 0;
-    }
-
-    /**
-     * 清掉同一张原图早先拖出来的其它尺寸（img_x@600x400.png 这类），只留这一次生成的那一份。
-     *
-     * 为什么扫目录而不是只删前端报上来的那一份：连着拖几下、或中途生成的尺寸，前端报不全，
-     * 目录里就攒下没人认领的旧文件。产物名是确定性的（原主名@宽x高+原扩展名），扫一遍就认得出：
-     * 原图自己不带 @，别的图主名不同，都落不进这个范围。
-     */
-    void removeStaleResized(const std::filesystem::path& dir, const std::wstring& stem, const std::wstring& ext, const std::wstring& keep)
-    {
-        std::error_code ec;
-        for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
-        {
-            if (!entry.is_regular_file()) continue;
-            auto fileName = entry.path().filename().wstring();
-            if (fileName == keep) continue; // 这一次要用的这份：留着
-            if (fileName.rfind(stem + L"@", 0) != 0) continue;
-            if (fileName.size() < stem.size() + 1 + ext.size()) continue;
-            if (fileName.compare(fileName.size() - ext.size(), ext.size(), ext) != 0) continue;
-            // 还有文章引用就留着：删了那边正文里的图就裂了
-            if (stillReferenced(fileName)) continue;
-            std::filesystem::remove(entry.path(), ec);
-        }
-    }
-}

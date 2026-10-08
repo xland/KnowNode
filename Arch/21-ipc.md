@@ -32,20 +32,34 @@
 **事件推送**（C++ 主动 → 前端）：`Page::emit(const JsonObject&)` → `PostWebMessageAsJson`，
 前端用 `Msg.on(eventName, ...)` 接收（对应 `Msg.ts` 里 `msg.eventName` 分支）。
 
-## 现有 method（示例 / 老项目残留）
+## method 现在都在哪
 
-| method | 作用 | 状态 |
-| --- | --- | --- |
-| `showWindow` | 显示窗口 | 窗口控制 |
-| `hittest` | 前端 `WindowBorder` 命中的 `HT_*` 值传给原生做拖拽/改变窗口大小 | 窗口控制 |
-| `minimize` / `maximize` / `restore` | 最小化 / 最大化 / 还原 | 窗口控制 |
-| `getImageDir` | 图片目录句柄（随回包附带对象） | **保留**，改名 `image.dir`（图片逻辑沿用老项目） |
+> **本节原来列的那张「老项目残留」表已删除（2026-10-08）**：`showWindow` / `hittest` /
+> `minimize` / `maximize` / `restore` / `getImageDir` 这批**旧名一个都不存在了**，
+> 全部已改名。留着它只会和下面的新命名清单打架。
+
+- **唯一实现处**：`KnowNode/Page.cpp` 的 `msgHandlers()` 注册表（`std::map<method, handler>`），
+  `onMsgReceived` 查表分发，查不到就回 `error`。**加 method 就是往这张表里加一项**，没有别的入口。
+- 名字一律用下面的**两段式 `对象.动作`** 清单；窗口类是 `win.show` / `win.hittest` /
+  `win.minimize` / `win.maximize` / `win.restore`，图片是 `image.dir`。
 
 ## 异步处理约定
 
-- 耗时操作**不要**在消息回调里同步做（会卡界面）。
-- 现有做法：后台线程处理，完成后投递 **`WM_DD_POST_JSON`** 回 UI 线程再发回包（见 `handleResizeImage` 的说明）。
-- 数据库读写若耗时较长，应遵循同一模式。
+> **本节原内容已作废（2026-10-08 核对）**：原文写"现有做法：后台线程处理，完成后投递
+> **`WM_DD_POST_JSON`** 回 UI 线程再发回包（见 `handleResizeImage` 的说明）"——
+> **这三样东西一个都不存在**：整个 C++ 侧没有 `std::thread` / `std::async` / `CreateThread`，
+> 没有 `WM_DD_POST_JSON` 这条消息，`handleResizeImage` 也已删除。
+> **别照着这一句去找代码。**
+
+**现状：所有 method 都是同步的**——handler 在 WebView2 消息回调所在的 UI 线程上跑完，
+直接 `PostWebMessageAsJson` 回包；SQLite 读写也在同一线程同步完成，没有跨线程回包的基础设施。
+
+- 现在没有哪个 method 慢到需要异步：都是单条 SQL 的小读写，量级是个人知识工具的量级。
+- **将来真出现耗时操作时再引异步**，届时两条硬约束：
+  1. **必须回 UI 线程才能碰 webview**（工作线程上发回包不安全）；
+  2. 回包**必须带原请求的 `id`**（前端靠它配对 Promise，丢了就永远 pending）。
+- `onMsgReceived` 里唯一"不统一回包"的例外是 `image.dir`：它自己发过回包了
+  （要用 `PostWebMessageAsJsonWithAdditionalObjects` 附带目录句柄），handler 返回 `true` 挡掉统一回包。
 
 ## 前端产物如何进入 exe（已从代码确认）
 
@@ -110,13 +124,28 @@ list.create    node.move    line.remove    detail.save    win.minimize
 | `getImageDir` | `image.dir` | 取数据目录下 `images` 子目录的句柄，用 `PostWebMessageAsJsonWithAdditionalObjects` 附带对象 |
 | ~~`resizeImage`~~ | ~~`image.resize`~~ | **已取消**：图片不再另存缩放图，改尺寸只改显示尺寸（见 [33](./33-know-detail.md)） |
 
-> 前端 `ImageStore.ts` 里写死的 method 名已同步；`Page::handleGetImageDir` 与老 `image` 表**保留不动**；
+> 前端 `ImageStore.ts` 里写死的 method 名已同步；`Page::handleGetImageDir` **保留不动**
+> （**没有 `image` 表**——数据层只有 `know_list` / `know_node` / `know_line` / `know_detail` /
+> `setting` 五张表，图片只落在 `images` 目录，2026-10-08 核对）；
 > `Page::handleResizeImage`（本就只有声明没有实现）与前端 `ImageResizePlugin` **已删除**。
 
 ### 事件推送（C++ → 前端）
 
-- **目前没有任何 C++ 主动推送的事件，事件名清单为空**（`Msg.on` 暂无对应事件）。
-- 将来需要时在此登记事件名，前端用 `Msg.on(eventName, ...)` 订阅。
+> **原文"目前没有任何 C++ 主动推送的事件，事件名清单为空"是错的（2026-10-08 更正）**：
+> `Window.cpp` 的 `WM_SIZE` 分支里就在 `page->emit()`，前端 `WindowBorder.ts` / `TitleBar.ts`
+> 也确实在用 `Msg.on` 订阅。清单如下。
+
+| eventName | 由谁发 | 时机 | 前端订阅方 |
+| --- | --- | --- | --- |
+| `maximize` | C++ `Window::wndProc`（`wParam == SIZE_MAXIMIZED` → `page->emit`） | 窗口进入最大化 | `WindowBorder.ts`（停用 8 个 resize 热区）、`TitleBar.ts`（切按钮图标） |
+| `restore` | C++ `Window::wndProc`（`wParam == SIZE_RESTORED` → `page->emit`） | 窗口退出最大化 | 同上，反向恢复 |
+
+- 事件就是一发 `JsonObject`，**靠 `eventName` 字段区分**：`Msg.ts` 里 `msg.eventName` 有值就走
+  `emit(eventName, msg)`，与「请求-响应」那条路（靠 `id` 配对）分开。
+- **事件没有 `id`、没有回包**，是单向广播。
+- 新增原生事件：`Window` / `Page` 里 `emit()`，并**登记到本表**；前端 `Msg.on(eventName, ...)` 订阅。
+- 另有一批**前端内部事件**走的是同一条 `Msg` 通道（自己 `emit`、自己 `on`，不跨语言），
+  清单见 [30-frontend.md](./30-frontend.md)「事件清单」——不要把两类混为一谈。
 
 ### C++ 侧：method → handler 注册表（**已确定**）
 
@@ -125,5 +154,5 @@ list.create    node.move    line.remove    detail.save    win.minimize
 - 注册方式沿用与数据层一致的自注册套路（表类自注册的同一风格）；
 - 未命中的 method 仍然**回 `error`**（保留现有行为，便于暴露"原生没重编"的问题）；
 - handler 统一接收 `args`，统一回包（自带回包的异步场景除外，如需要附带对象的调用）。
-- 图片相关（`Page::handleGetImageDir`、`Page::handleResizeImage`、老 `image` 表）**确定保留**，
-  只改 method 名；文章相关才删。
+- 图片相关**确定保留**的只有 `Page::handleGetImageDir`（method 名 `image.dir`）与 `images` 目录；
+  `Page::handleResizeImage` 与老 `image` 表都**不存在**。文章相关才删。

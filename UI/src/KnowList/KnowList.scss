@@ -21,6 +21,8 @@
     justify-content: space-between;
     font-size: 13px;
     color: #1f2329;
+    /* 比面板底色（#fafafa）深一档，把标题栏和下面的列表内容分开 */
+    background: #f0f1f3;
   }
 
   /* 新建按钮：iconfont 图标，鼠标悬停时变蓝 */

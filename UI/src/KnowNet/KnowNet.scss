@@ -82,6 +82,36 @@
     }
   }
 
+  /* 右上角「回到中心」：与搜索框同一套悬浮卡片的样式，同样默认藏着——
+     空画布没什么可「回」的，加载了知识才由 JS 加 .show 放出来 */
+  .knowNetCenter {
+    position: absolute;
+    top: 8px;
+    right: 10px;
+    z-index: 4;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    font-size: 14px;
+    color: #6b7280;
+    background: #fff;
+    border: 1px solid #e5e6eb;
+    border-radius: 3px;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+    box-sizing: border-box;
+    cursor: pointer;
+
+    &.show {
+      display: flex;
+    }
+
+    &:hover {
+      color: #1677ff;
+    }
+  }
+
   /* 双击节点改标题的输入框：位置与大小由 JS 按当前缩放算出来盖在节点上（默认藏着） */
   .knowNetTitleEdit {
     position: absolute;
