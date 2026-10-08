@@ -433,10 +433,6 @@ class KnowNet extends CtrlBase {
       stroke: this.nodeStroke(node.color ?? 0, false), // 刚建出来的节点不可能是选中态
       strokeWidth: NODE_STROKE_WIDTH,
       cornerRadius: NODE_RADIUS,
-      shadowColor: "#000",
-      shadowBlur: 2,
-      shadowOpacity: 0.08,
-      shadowOffsetY: 1,
     });
     const text = new Konva.Text({
       text: node.title,
@@ -1083,6 +1079,18 @@ class KnowNet extends CtrlBase {
     }
   }
 
+  /**
+   * 新建知识时送的那个节点：由 KnowList 建完库并选中它（`open()` 跑完）之后调用。
+   * 建在画布原点 `(0, 0)`——`open()` 刚用 `centerOrigin()` 把视口中心对准了那里，
+   * 所以它正好出现在画布正中心；入库后 `adoptNewNode()` 会选中它并直接进标题编辑，
+   * 用户可以马上敲名字，不必先在空白处右键。
+   */
+  async createFirstNode(listId: number): Promise<void> {
+    // 几个 await 之间用户可能已经点开了别的知识：那就别往人家那张网上加节点
+    if (this.listId !== listId || this.nodes.length) return;
+    await this.createNodeAt({ x: 0, y: 0 });
+  }
+
   /** 新节点入库之后这一段是共用的：进本地数据、重画、选中它并直接进入标题编辑（用户可以马上敲名字） */
   private adoptNewNode(nodeId: number, x: number, y: number): void {
     this.nodes.push({ id: nodeId, title: DEFAULT_TITLE, x, y, color: 0 });
@@ -1132,6 +1140,10 @@ class KnowNet extends CtrlBase {
     input.style.height = `${height}px`;
     input.style.fontSize = `${NODE_FONT_SIZE * scale}px`;
     this.editingNodeId = id;
+    // 输入框是全透明的，节点照原样露着（背景、边框都在）；底下 Konva 画的那份标题要藏起来，
+    // 不然它和输入框里的字会叠成两层（收掉编辑时加回来，见 endTitleEdit）
+    group.findOne<Konva.Text>("Text")?.visible(false);
+    this.nodeLayer?.batchDraw();
     this.updateStageDraggable(); // 编辑期间不许平移：输入框是 DOM，不会跟着画布走
     input.focus();
     input.select();
@@ -1150,6 +1162,9 @@ class KnowNet extends CtrlBase {
     this.titleEditor.style.display = "none";
     this.updateStageDraggable(); // 编辑收掉了：能不能拖画布重新交回给 Ctrl
     if (commit) await this.commitTitle(id, value || DEFAULT_TITLE);
+    // 标题文字加回来：排在写库之后，先更新再显示，免得闪一下旧标题（节点可能已被删掉，走可选链）
+    this.groups.get(id)?.findOne<Konva.Text>("Text")?.visible(true);
+    this.nodeLayer?.batchDraw();
   }
 
   /**

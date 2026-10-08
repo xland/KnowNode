@@ -117,14 +117,15 @@
     position: absolute;
     z-index: 3;
     display: none;
-    padding: 0 6px;
+    padding: 0;
     text-align: center;
     color: #1f2329;
-    background: #fff;
-    border: 2px solid #1677ff;
-    /* 与节点矩形的 NODE_RADIUS 一致：这个框是盖在节点上的，圆角不一样一眼就看出来 */
-    border-radius: 3px;
+    /* 全透明：它只负责接输入，节点自己的背景、边框、圆角全程露在外面不被遮住，
+       "正在编辑"的样子 = 节点本来的样子 + 一个光标。
+       代价是底下 Konva 画的那份标题要临时藏起来（见 KnowNet.beginTitleEdit），
+       不然它和输入框里的字会叠成两层 */
+    background: transparent;
+    border: none;
     outline: none;
-    box-sizing: border-box;
   }
 }

@@ -26,9 +26,12 @@ const NAME_MAX_LENGTH = 36;
  * 点某一项 = 选中它并让 KnowNet 加载这张网（列表与画布是「选哪个知识 → 显示哪张网」的关系）。
  * 列表项右键 → 修改知识名称 / 删除知识；新建走右上角加号 → 悬浮对话框（Dialog）。
  *
- * 知识是"一张网的入口"：新建知识时原生侧（`list.create`）**只插 know_list 这一行**
- * （外加它自己的那份详情），**不建任何节点**——所以建完直接选中它，但 `KnowNet` 加载出来
- * 是**空画布**，第一个节点要用户在空白处右键新建。
+ * 知识是"一张网的入口"：新建知识时原生侧（`list.create`）只插 `know_list` 这一行
+ * （外加它自己的那份详情），**不建任何节点**；节点由前端紧接着补上——建完库、选中它、
+ * `KnowNet.open()` 跑完之后调 `KnowNet.createFirstNode()`，在画布正中心建第一个节点并
+ * 直接进入标题编辑（2026-10-08 改定：否则用户得先右键才能建出第一个节点，太绕）。
+ *
+ * 注意分工：**库里那条 `know_list` 依然是干净的**，"送第一个节点"是前端的行为，不是原生侧的。
  * 「未命名」是**新建节点的默认标题**，不是"新建知识时自动送的那个节点"。
  */
 class KnowList extends CtrlBase {
@@ -123,6 +126,9 @@ class KnowList extends CtrlBase {
       const item = this.buildRow({ id, name });
       this.list?.appendChild(item);
       await this.select(item);
+      // 新知识送第一个节点：建在画布正中心并直接进入标题编辑（见 KnowNet.createFirstNode）。
+      // 必须排在 select 之后：它等的是 open()，那时视口中心才对准原点、nodes 也才换成本知识的数据
+      await KnowNet.createFirstNode(id);
     } catch {
       // 入库失败：列表保持原样，用户可以再点一次加号
     }

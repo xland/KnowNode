@@ -116,7 +116,7 @@
 | [21](./21-ipc.md) | 「现有 method（老项目残留）」列 `showWindow` 等旧名 | 旧名全无，method 只在 `msgHandlers()` 注册表 |
 | [30](./30-frontend.md) | `Msg.on` 只用于原生推送事件 | 已分「原生推送 / 前端内部」两类并列表 |
 | [31](./31-content-box.md) | `ContentBox.ts` 仍 import 并挂载 `ArticleTitle` / `ArticleEditor` | 已删净，只挂三个 `Know*` |
-| [32](./32-know-net.md) | 「新建知识时画布已有一个『未命名』节点」 | **不建节点**，画布是空的 |
+| [32](./32-know-net.md) | 「新建知识时画布已有一个『未命名』节点」 | 原始说法**现已成立**（2026-10-08 改了行为）：新建知识会在画布正中心建一个「未命名」节点并直接进入标题编辑。注意它**不是** `list.create` 建的——原生侧仍不建节点，是前端 `KnowNet.createFirstNode()` 补的 |
 | [33](./33-know-detail.md) | 详情面板默认 500px | **600px**（`KnowDetail.scss`） |
 | [33](./33-know-detail.md)、[34](./34-know-list.md) | 36 字符上限"落在画布输入框里"、常量集中一处 | 只**知识名称**落地；画布输入框**没有**校验 |
 | [40](./40-data-model.md) | 后加的列靠 `ensureColumn` 补、`ensureDetail` 兜底 | **不做老库兼容**，两者已删除 |
