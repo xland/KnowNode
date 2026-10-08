@@ -53,6 +53,20 @@ function lighten(hex: string, ratio: number): string {
 }
 
 /**
+ * 点到线段的最短距离（都在画布坐标里）。连线合并成一整串之后，
+ * Konva 那套"按 Shape 认"的命中再也帮不上忙了——点到的是那一整串里的某一截，
+ * 形状层面无从得知是哪一条，只能自己按几何判断落到哪条线上。
+ */
+function distanceToSegment(p: Konva.Vector2d, a: { x: number; y: number }, b: { x: number; y: number }): number {
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  const lengthSq = dx * dx + dy * dy;
+  if (lengthSq === 0) return Math.hypot(p.x - a.x, p.y - a.y); // 两端重合：退化成一个点
+  const t = Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / lengthSq));
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy));
+}
+
+/**
  * 节点矩形的尺寸参数（Arch/32 里标着待确认，这里先取一组能用的值，集中在一处方便调）。
  * NODE_MIN_WIDTH / NODE_MAX_WIDTH 之外的部分靠文字省略号处理。
  */
@@ -141,8 +155,34 @@ class KnowNet extends CtrlBase {
     origin: Konva.Vector2d;
     members: Map<number, { x: number; y: number }>;
   } | null = null;
-  /** 连线 id → 它那条 Path，选中换样式与右键认线都要按 id 反查 */
-  private lineShapes = new Map<number, Konva.Path>();
+  /**
+   * **每种颜色**的连线合成一整个 `Konva.Path`：原先每条连线一个 Path（三万条就是三万个对象），
+   * 合并之后总共只有 `MARK_COLORS.length + 1` 个（6 种标记色 + 没着色的默认灰）。
+   * 代价是命中和选中都不能再按 Shape 认了——见 `lineAtPoint()` 与 `paintSelectedLine()`。
+   */
+  private lineGroups = new Map<number, Konva.Path>();
+  /** 选中的那条连线单独的一份：它必须从颜色组那一整串里拿出来，才显得出选中色 */
+  private selectedPath: Konva.Path | null = null;
+  /**
+   * 正在拖拽的那几个节点身上的连线，会被**临时从颜色组里拎出来**单独画（见 `beginLineLift`）。
+   * 不这么做的话，拖拽每一帧都得重建它所属的那一整串——而绝大多数线默认是同一个灰色，
+   * 那一串就是成千上万段路径，每帧重拼一遍，反而比合并之前**更慢**。
+   */
+  private liftedLines = new Set<number>();
+  /** 拎出来的那几条线，按颜色分成最多 7 份（一个 Path 只能有一个 stroke） */
+  private liftPaths = new Map<number, Konva.Path>();
+  /**
+   * id → 节点数据。替掉到处 `nodes.find` 的线性扫描：**拖拽时每一帧都要按 id 取连线的两个端点**，
+   * 线性查会让一次拖动变成 O(线数 × 节点数)（见 `beginLineLift`）。
+   */
+  private nodesById = new Map<number, NodeData>();
+  /** id → 连线数据，同上 */
+  private linesById = new Map<number, LineData>();
+  /**
+   * 邻接表：节点 id → 挂在它身上的连线 id 列表。
+   * 拖一个节点时只需要重画这几条——其余连线的端点没动，路径自然不用重算。
+   */
+  private lineIdsByNode = new Map<number, number[]>();
   /** 正在就地改标题的节点 id（非 null 时画布不平移，见 beginTitleEdit） */
   private editingNodeId: number | null = null;
   /** 搜不到节点时那条提示的消失计时器（连着搜两次只认最后一次） */
@@ -153,6 +193,12 @@ class KnowNet extends CtrlBase {
   private tempLink: Konva.Path | null = null;
   /** 预览线这会儿指着哪个节点（高亮它，表示「松手就连到它」） */
   private linkTargetId: number | null = null;
+  /**
+   * 选中节点右侧那个「+」按钮：**整张网只有这一个**，要用时才挂到当前单选的节点旁边。
+   * 早先是每个节点在各自的 Group 里藏一个（`visible: false`），一张网白养 4 × 节点数 个 Shape。
+   * 见 `updateAddButton`。
+   */
+  private addBtn: Konva.Group | null = null;
 
   constructor() {
     super(html);
@@ -203,7 +249,22 @@ class KnowNet extends CtrlBase {
     // 这个标志只在"这一次按下 → 抬起"之内有效，下次按下就被清掉（见 mousedown）
     this.stage.on("click", (e) => {
       if (this.skipStageClick) return void (this.skipStageClick = false);
+      // 连线那一整串不收事件了（listening = false），点没点在线上只能按指针位置算——见 lineAtPoint
+      const lineId = this.lineIdAtPointer();
+      if (lineId != null) {
+        void this.selectLine(lineId);
+        return;
+      }
       if (e.target === this.stage) this.selectNode(null);
+    });
+
+    // 悬停在连线上要用手型光标：原先由每条线自己接 mouseenter / mouseleave，
+    // 合并之后没有那个"每条线的 Shape"了，统一在这里按指针算
+    this.stage.on("mousemove", () => {
+      if (this.linking) return; // 拉线过程中是十字光标，别抢
+      const { nodeId, lineId } = this.pickAtPointer();
+      if (nodeId != null) return; // 指针在节点上：光标归节点自己管（边缘十字 / 中间移动）
+      this.setCursor(lineId != null ? "pointer" : "");
     });
 
     // 右键：命中连线 → 挑颜色 + 删连线；命中节点 → 挑颜色 + 删节点；命中空白 → 不弹
@@ -211,10 +272,10 @@ class KnowNet extends CtrlBase {
     this.stage.on("contextmenu", (e) => {
       e.evt.preventDefault();
       const evt = e.evt as MouseEvent;
-      const lineId = this.lineIdOfShape(e.target);
+      const lineId = this.lineHitAt(evt.clientX, evt.clientY);
       if (lineId != null) {
         this.selectLine(lineId); // 先选中（详情面板跟着换过去），再弹菜单
-        const line = this.lines.find((l) => l.id === lineId);
+        const line = this.linesById.get(lineId);
         Menu.open(evt.clientX, evt.clientY, [
           this.colorRow(line?.color ?? 0, (color) => void this.markLine(lineId, color)),
           { label: "删除连线", onSelect: () => void this.removeLine(lineId) },
@@ -225,7 +286,7 @@ class KnowNet extends CtrlBase {
       if (nodeId != null) {
         // 右键的正是多选里的一个：保留这一批（不清成单选），删也是删整批
         const batch = this.selectedNodes.has(nodeId) ? [...this.selectedNodes] : (this.selectNode(nodeId), [nodeId]);
-        const node = this.nodes.find((n) => n.id === nodeId);
+        const node = this.nodesById.get(nodeId);
         Menu.open(evt.clientX, evt.clientY, [
           this.colorRow(node?.color ?? 0, (color) => void this.markNode(nodeId, color)),
           {
@@ -319,7 +380,7 @@ class KnowNet extends CtrlBase {
    * 只改文字与宽度，不动坐标，也不用重画整张图。
    */
   updateNodeTitle(id: number, title: string): void {
-    const node = this.nodes.find((n) => n.id === id);
+    const node = this.nodesById.get(id);
     if (!node) return;
     node.title = title;
     const group = this.groups.get(id);
@@ -336,7 +397,7 @@ class KnowNet extends CtrlBase {
     text.width(width);
     text.offsetX(width / 2);
     // 矩形宽了 / 窄了，「+」按钮要重新贴到新的右边缘外（不然它就压在节点上了）
-    this.placeAddButton(group, width);
+    this.updateAddButton();
     this.redrawLines();
   }
 
@@ -364,8 +425,41 @@ class KnowNet extends CtrlBase {
     this.stage.height(container.clientHeight);
   }
 
+  /**
+   * 重建「id → 数据」这几个索引。**凡改动 `this.nodes` / `this.lines` 之后都要来一次**，
+   * 否则索引里会残留已删的对象（查得到却已经不在画布上），或者查不到刚加的。
+   *
+   * 为什么非要有它们：`nodes.find` 是线性扫描，而拖拽时每帧都要按 id 取连线的两个端点——
+   * 一次拖动就成了 O(线数 × 节点数)，几千条线时每帧几百毫秒。换成按 id 直接取之后，
+   * 同样的活变成 O(度数)（见 `beginLineLift`），与整张网多大无关。
+   *
+   * 谁在调：`render()` 开头——它是"数据 → 视图"的同步点，两边必须一致，顺带兜底了
+   * 整体赋值 / filter 那几处；不走 `render()` 的（新加一个节点、新加一条连线）自己补一次。
+   */
+  private reindex(): void {
+    this.nodesById.clear();
+    for (const node of this.nodes) this.nodesById.set(node.id, node);
+    this.linesById.clear();
+    this.lineIdsByNode.clear();
+    for (const line of this.lines) {
+      this.linesById.set(line.id, line);
+      for (const nodeId of [line.nodeAId, line.nodeBId]) {
+        const ids = this.lineIdsByNode.get(nodeId);
+        if (ids) ids.push(line.id);
+        else this.lineIdsByNode.set(nodeId, [line.id]);
+      }
+    }
+  }
+
   private render(): void {
+    this.reindex(); // 索引与这份数据对齐：下面每一步都按 id 取
     this.abortLink(); // 重画会把预览线一起清掉，先按规矩收尾（恢复被临时关掉的拖拽）
+    // 那个「+」按钮全局只有一份、是跨 render 复用的：destroyChildren 会把它一并销毁，先摘出来。
+    // remove() 只解除父子关系、不销毁；render 末尾补选中态时再挂回去（见 updateAddButton）
+    if (this.addBtn) {
+      this.addBtn.remove();
+      this.addBtn.visible(false);
+    }
     this.nodeLayer?.destroyChildren();
     this.groups.clear();
     this.redrawLines();
@@ -388,31 +482,159 @@ class KnowNet extends CtrlBase {
     return `M ${a.x} ${a.y} L ${b.x} ${b.y}`;
   }
 
+  /** 一条连线那一小段路径（两端节点中心之间的直线）；某一端已经不在了就给 null */
+  private lineSegment(id: number): string | null {
+    const line = this.linesById.get(id);
+    if (!line) return null;
+    const a = this.nodesById.get(line.nodeAId);
+    const b = this.nodesById.get(line.nodeBId);
+    if (!a || !b) return null;
+    return this.linePath(a, b);
+  }
+
   /**
-   * 一条连线。它现在是**可以点、可以右键**的：单击选中（详情面板切到它），右键弹菜单删它。
-   * 线本身只有 LINE_WIDTH 那么宽，判定放宽到 12px 才点得中（点击热区与视觉粗细是两回事，
-   * 线细了也要照样点得中）；`name: "line"` 用来在事件里认出它。
+   * 同一种颜色的全部连线拼成**一个** Path 的 data：
+   * `M ax ay L bx by M cx cy L dx dy …`——若干条互不相连的笔画串成一串，一次画完。
+   *
+   * **选中的那条不在这串里**：它另有单独的一份（见 `paintSelectedLine`）。
+   * 一整串只能共用一个 stroke，混在里面就没法给它单独换选中色。
    */
-  private buildLine(a: NodeData, b: NodeData, id: number): Konva.Path {
-    const line = this.lines.find((l) => l.id === id);
+  private lineGroupData(color: number): string {
+    const parts: string[] = [];
+    for (const line of this.lines) {
+      if ((line.color ?? 0) !== color) continue;
+      if (line.id === this.selectedLineId) continue; // 它有单独的一份
+      if (this.liftedLines.has(line.id)) continue; // 正被拖拽拎出去也是一种例外
+      const seg = this.lineSegment(line.id);
+      if (seg) parts.push(seg);
+    }
+    return parts.join(" ");
+  }
+
+  /**
+   * 某种颜色那一串 Path（第一次用到时才建出来）。
+   * **`listening = false`**：点得到这一串中的某一截，但 Konva 没法告诉你点到了哪一条——
+   * 所以连线的命中一律改由 `lineAtPoint()` 按几何算。放在这里儿的 Shape 只管画。
+   */
+  private ensureLineGroup(color: number): Konva.Path {
+    const existed = this.lineGroups.get(color);
+    if (existed) return existed;
     const path = new Konva.Path({
-      data: this.linePath(a, b),
-      stroke: this.lineStroke(line?.color ?? 0, false), // 刚建出来的线不可能是选中态
+      stroke: this.lineStroke(color, false),
       strokeWidth: LINE_WIDTH,
       lineCap: "round",
-      hitStrokeWidth: LINE_HIT_WIDTH,
-      name: "line",
+      listening: false,
     });
-    path.on("click", (e) => {
-      // 别冒泡到 stage：stage 收到 click 会当成"点了空白"，把刚选中的又取消掉
-      e.cancelBubble = true;
-      this.selectLine(id);
-    });
-    path.on("mouseenter", () => this.setCursor("pointer"));
-    path.on("mouseleave", () => {
-      if (!this.linking) this.setCursor("");
-    });
+    this.lineLayer?.add(path);
+    this.lineGroups.set(color, path);
     return path;
+  }
+
+  /** 重算某种颜色那一整串：线增删了、端点移动了、标记色改了都要来一次 */
+  private refreshLineGroup(color: number): void {
+    this.lineGroups.get(color)?.data(this.lineGroupData(color));
+  }
+
+  /**
+   * 开始拖一批节点：把它们身上的连线从颜色串里**拎出来**单独画。
+   * 之后每帧只更新这几条（O(度数)），松手再并回去（见 `endLineLift`）。
+   *
+   * 选中的那条不参与：它本来就有单独的一份（`selectedPath`），两份一起画会叠成两条线。
+   */
+  private beginLineLift(nodeIds: Iterable<number>): void {
+    const ids = new Set<number>();
+    for (const nodeId of nodeIds) {
+      for (const lineId of this.lineIdsByNode.get(nodeId) ?? []) {
+        if (lineId === this.selectedLineId) continue;
+        ids.add(lineId);
+      }
+    }
+    this.liftedLines = ids;
+    for (const color of this.colorsOfLines(ids)) this.refreshLineGroup(color); // 从原来那几串里摘出来
+    this.paintLiftPaths();
+  }
+
+  /** 松手：把拎出来的交还给它所属的那一整串，临时那几份 Path 一并销毁 */
+  private endLineLift(): void {
+    this.liftPaths.forEach((path) => path.destroy());
+    this.liftPaths.clear();
+    this.liftedLines.clear();
+  }
+
+  /** 重画拎出来那几条：**按颜色分份**（一份只能一个 stroke）；这次没有要拎的就什么都不留 */
+  private paintLiftPaths(): void {
+    const layer = this.lineLayer;
+    if (!layer) return;
+    const colors = this.colorsOfLines(this.liftedLines);
+    if (!this.liftedLines.size) {
+      this.liftPaths.forEach((path) => path.destroy());
+      this.liftPaths.clear();
+      return;
+    }
+    for (const color of colors) {
+      const parts: string[] = [];
+      for (const id of this.liftedLines) {
+        if ((this.linesById.get(id)?.color ?? 0) !== color) continue;
+        const seg = this.lineSegment(id);
+        if (seg) parts.push(seg);
+      }
+      let path = this.liftPaths.get(color);
+      if (!path) {
+        path = new Konva.Path({
+          stroke: this.lineStroke(color, false),
+          strokeWidth: LINE_WIDTH,
+          lineCap: "round",
+          listening: false,
+        });
+        layer.add(path);
+        this.liftPaths.set(color, path);
+      }
+      path.data(parts.join(" "));
+    }
+    // 上一次拖动留下的、这一轮用不到的颜色：收掉，别让临时 Shape 越积越多
+    for (const [color, path] of [...this.liftPaths]) {
+      if (colors.has(color)) continue;
+      path.destroy();
+      this.liftPaths.delete(color);
+    }
+  }
+
+  /** 这几条线各自是什么颜色（去重） */
+  private colorsOfLines(ids: Iterable<number>): Set<number> {
+    const colors = new Set<number>();
+    for (const id of ids) {
+      const line = this.linesById.get(id);
+      if (line) colors.add(line.color ?? 0);
+    }
+    return colors;
+  }
+
+  /**
+   * 选中的那条连线单独一份 Shape：它得从颜色组那一整串里拿出来，
+   * 不然改不了它的颜色（那一串共用一个 stroke）。取消选中时这份就销毁掉。
+   */
+  private paintSelectedLine(): void {
+    const layer = this.lineLayer;
+    if (!layer) return;
+    const id = this.selectedLineId;
+    const seg = id != null ? this.lineSegment(id) : null;
+    if (id == null || !seg) {
+      this.selectedPath?.destroy();
+      this.selectedPath = null;
+      return;
+    }
+    const color = this.linesById.get(id)?.color ?? 0;
+    if (!this.selectedPath) {
+      this.selectedPath = new Konva.Path({
+        strokeWidth: LINE_WIDTH,
+        lineCap: "round",
+        listening: false, // 与那一整串同理：命中靠几何，不靠形状
+      });
+      layer.add(this.selectedPath);
+    }
+    this.selectedPath.data(seg);
+    this.selectedPath.stroke(this.lineStroke(color, true));
+    this.selectedPath.moveToTop();
   }
 
   /**
@@ -446,9 +668,7 @@ class KnowNet extends CtrlBase {
       wrap: "none",
       listening: false,
     });
-    const addBtn = this.buildAddButton();
-    group.add(rect, text, addBtn);
-    this.placeAddButton(group, width);
+    group.add(rect, text);
 
     // 边缘 = 往外拉线，中间 = 拖节点：按下时先分清是哪一种。
     // 挂在矩形上而不是整个 group 上：这样「+」按钮上的按下不会掺和进来。
@@ -492,6 +712,8 @@ class KnowNet extends CtrlBase {
       // 兜底：拉线的这一下要是被 Konva 认成了拖拽，立刻停掉（此刻位置还没变）
       if (this.linking) return void group.stopDrag();
       this.beginGroupDrag(node.id); // 多选时记下基线，好让整批跟着一起走
+      // 这一批节点身上的线从颜色串里拎出来单独画：否则每帧都得重建它所属的那一整串
+      this.beginLineLift(this.groupDrag?.members.keys() ?? [node.id]);
     });
     // 拖拽过程中就按实时位置重画连线，线跟着节点走（松手才改变会显得"线断了"）。
     // 节点坐标与写库仍留到 dragend：拖动中每动一下都写一次库没有意义
@@ -500,7 +722,10 @@ class KnowNet extends CtrlBase {
       node.x = group.x();
       node.y = group.y();
       this.applyGroupDrag(); // 多选：同批其余节点按同一个位移跟上
-      this.updateLines();
+      this.updateAddButton(); // 「+」按钮不在 Group 里了，得手动让它跟着节点走
+      // 只重画刚拎出来的那几条（O(度数)）；剩下的线两端都没动，整串不用重算
+      this.paintLiftPaths();
+      this.paintSelectedLine(); // 选中的那条另有单独一份，它可能也在这一批里动
     });
     group.on("dragend", () => {
       if (this.linking) return; // 拉线：这一下"拖拽"不算数，别写库
@@ -509,47 +734,36 @@ class KnowNet extends CtrlBase {
       this.applyGroupDrag();
       // 多选时这一批都要写库（单选就只有它自己）
       for (const id of this.groupDrag?.members.keys() ?? [node.id]) {
-        const item = this.nodes.find((n) => n.id === id);
+        const item = this.nodesById.get(id);
         if (item) void Msg.invoke("node.move", { id, x: item.x, y: item.y });
       }
       this.groupDrag = null;
+      this.endLineLift(); // 把线上还给它所属的那一整串（下面 redrawLines 会按新的位置重算）
       this.redrawLines();
     });
     return group;
   }
 
   /**
-   * 只把已有连线挪到新路径上，**不重建形状**：拖拽这种每帧都要走的场合用它。
-   * redrawLines 会销毁并新建所有 Path（连带重建事件与选中态），每帧来一遍是白费。
-   */
-  private updateLines(): void {
-    for (const line of this.lines) {
-      const shape = this.lineShapes.get(line.id);
-      if (!shape) continue;
-      const a = this.nodes.find((n) => n.id === line.nodeAId);
-      const b = this.nodes.find((n) => n.id === line.nodeBId);
-      if (!a || !b) continue;
-      shape.data(this.linePath(a, b));
-    }
-  }
-
-  /**
    * 重画全部连线：节点挪位置、标题改宽度、增删连线之后都要来一遍（线是按坐标算出来的，不随节点走）。
-   * 顺带重建「id → Path」的映射，并把选中态补回新画出来的那条线上。
+   * 现在**按颜色合并成一串**来画（见 `lineGroupData`），这里就是把每一串都重算一遍，
+   * 顺带把选中那条单独那份也补回来（它不在任何一串里）。
    */
   private redrawLines(): void {
-    if (!this.lineLayer) return;
-    this.lineLayer.destroyChildren();
-    this.lineShapes.clear();
-    for (const line of this.lines) {
-      const a = this.nodes.find((n) => n.id === line.nodeAId);
-      const b = this.nodes.find((n) => n.id === line.nodeBId);
-      if (!a || !b) continue;
-      const path = this.buildLine(a, b, line.id);
-      this.lineShapes.set(line.id, path);
-      this.lineLayer.add(path);
+    const layer = this.lineLayer;
+    if (!layer) return;
+    layer.destroyChildren();
+    this.lineGroups.clear();
+    this.selectedPath = null;
+    // 全量重建 = 提线状态一并作废：那一层的所有 Shape（含临时那份）都已经被 destroyChildren 销毁了，
+    // 再留着引用就是悬挂指针，而且这条线会因为"既不落在颜色串里、临时那份又没了"而干脆不显示
+    this.liftPaths.clear();
+    this.liftedLines.clear();
+    // 一共 7 档颜色：0 = 未着色，1..6 = MARK_COLORS。全建出来，空的那一串 data 为空、不画出任何东西
+    for (let color = 0; color <= MARK_COLORS.length; color++) {
+      this.ensureLineGroup(color).data(this.lineGroupData(color));
     }
-    if (this.selectedLineId != null) this.paintLine(this.selectedLineId);
+    this.paintSelectedLine();
   }
 
   /** 唯一选中的那个节点；多选或没选中时为 null（详情面板、Tab、「+」按钮都只在单选时有意义） */
@@ -598,7 +812,7 @@ class KnowNet extends CtrlBase {
   private syncSelectionUi(): void {
     const sole = this.soleNodeId;
     if (sole != null) {
-      StatusBar.setSelection(this.nodes.find((n) => n.id === sole)?.title ?? "");
+      StatusBar.setSelection(this.nodesById.get(sole)?.title ?? "");
       void KnowDetail.showNode(sole);
       return;
     }
@@ -612,8 +826,8 @@ class KnowNet extends CtrlBase {
     if (this.selectedNodes.size) this.selectNodes([]);
     if (this.selectedLineId === id) return;
     const previous = this.selectedLineId;
+    this.selectedLineId = id; // 先落状态：下面重算那一串，是按"现在选中谁"倒推的
     if (previous != null) this.paintLine(previous);
-    this.selectedLineId = id;
     if (id != null) this.paintLine(id);
 
     if (id == null) {
@@ -622,28 +836,32 @@ class KnowNet extends CtrlBase {
       StatusBar.setSelection("");
       return;
     }
-    const line = this.lines.find((l) => l.id === id);
+    const line = this.linesById.get(id);
     StatusBar.setSelection(line ? this.lineLabel(line) : "");
     void KnowDetail.showLine(id);
   }
 
   /**
-   * 按"当前是否选中 + 标记色"重画一条线的颜色，粗细恒为 LINE_WIDTH。
+   * 一条连线的样子变了（选中变化 / 改了标记色）之后重画它。粗细恒为 LINE_WIDTH。
    * 选中态**不能**一律改回蓝色：右键挑完颜色时这条线正被选中，改蓝就等于刚挑的颜色看不见了。
+   *
+   * **调用前必须先落状态**：那一整串是按"现在选中谁 + 每条什么颜色"倒推出来的，
+   * 顺序反了会重算出错误的串（典型症状：刚取消选中的那条线整个不见了，或者砍掉标记色后旧位置还留着一条）。
+   *
+   * @param oldColor 改了标记色时才传：改色会横跨两串，旧的那一串也要把它摘出去。
    */
-  private paintLine(id: number): void {
-    const path = this.lineShapes.get(id);
-    if (!path) return;
-    const line = this.lines.find((l) => l.id === id);
-    path.stroke(this.lineStroke(line?.color ?? 0, this.selectedLineId === id));
-    path.strokeWidth(LINE_WIDTH);
+  private paintLine(id: number, oldColor?: number): void {
+    const line = this.linesById.get(id);
+    if (line) this.refreshLineGroup(line.color ?? 0);
+    if (oldColor != null && oldColor !== (line?.color ?? 0)) this.refreshLineGroup(oldColor);
+    this.paintSelectedLine();
     this.lineLayer?.batchDraw();
   }
 
   /** 状态栏上怎么称呼一条连线：两端节点的标题（连线自己没有标题） */
   private lineLabel(line: LineData): string {
-    const a = this.nodes.find((n) => n.id === line.nodeAId)?.title ?? "";
-    const b = this.nodes.find((n) => n.id === line.nodeBId)?.title ?? "";
+    const a = this.nodesById.get(line.nodeAId)?.title ?? "";
+    const b = this.nodesById.get(line.nodeBId)?.title ?? "";
     return `${a} ↔ ${b}`;
   }
 
@@ -679,7 +897,7 @@ class KnowNet extends CtrlBase {
 
   /** 按当前标记色重画节点的填充与边框（边框带标记色，所以改标记色时要跟着换；选中态一起算） */
   private paintNode(id: number): void {
-    const node = this.nodes.find((n) => n.id === id);
+    const node = this.nodesById.get(id);
     const rect = this.groups.get(id)?.findOne<Konva.Rect>("Rect");
     if (!node || !rect) return;
     rect.fill(this.nodeFill(node.color ?? 0));
@@ -689,7 +907,7 @@ class KnowNet extends CtrlBase {
 
   /** 给节点打标记色：先写库，成功才改本地并重画（写失败就保持原样，下一轮还会再写） */
   private async markNode(id: number, color: number): Promise<void> {
-    const node = this.nodes.find((n) => n.id === id);
+    const node = this.nodesById.get(id);
     if (!node || (node.color ?? 0) === color) return;
     try {
       await Msg.invoke("node.color", { id, color });
@@ -702,15 +920,16 @@ class KnowNet extends CtrlBase {
 
   /** 给连线打标记色，与 markNode 同样的套路 */
   private async markLine(id: number, color: number): Promise<void> {
-    const line = this.lines.find((l) => l.id === id);
+    const line = this.linesById.get(id);
     if (!line || (line.color ?? 0) === color) return;
     try {
       await Msg.invoke("line.color", { id, color });
     } catch {
       return;
     }
+    const previous = line.color ?? 0; // 改了色就横跨两串：旧色那一串也要把它摘出去
     line.color = color;
-    this.paintLine(id);
+    this.paintLine(id, previous);
   }
 
   /**
@@ -733,32 +952,62 @@ class KnowNet extends CtrlBase {
     const rect = group?.findOne<Konva.Rect>("Rect");
     if (!group || !rect) return;
     // 选中与否只换颜色，不换粗细：两种状态都是 1px（2026-10-07 改定）
-    const node = this.nodes.find((n) => n.id === id);
+    const node = this.nodesById.get(id);
     rect.stroke(this.nodeStroke(node?.color ?? 0, on));
     rect.strokeWidth(NODE_STROKE_WIDTH);
-    // 「+」按钮只属于单选的那一个节点：多选时谁都不带（它会作用于"当前选中的那个"，
-    // 而多选没有"那一个"）；拉线时高亮别的节点也不该把它的按钮带出来
-    group.findOne<Konva.Group>(".addBtn")?.visible(on && id === this.soleNodeId);
+    // 高亮一变，那个共用的「+」按钮归谁、在不在都得重算（见 updateAddButton）
+    this.updateAddButton();
   }
 
   /**
-   * 把「+」按钮贴到节点右边缘外：按钮中心离边缘 ADD_BUTTON_OFFSET，圆自身的半径不算进去，
-   * 所以圆与节点之间还留着 ADD_BUTTON_OFFSET - ADD_BUTTON_RADIUS 的空隙。
-   * 标题改长 / 改短时矩形宽度会变（见 updateNodeTitle），必须重新贴一次，否则按钮会留在旧位置上、
-   * 看起来像压在节点上。
+   * 把那个唯一的「+」按钮摆到该在的地方：**单选**才显示，贴在那个节点右边缘外；其余情况一律收起。
+   *
+   * **为什么共用一份**：它早先挂在各自的节点 Group 里、`visible: false` 常驻，于是每张网都白养着
+   * 4 × 节点数 个 Konva Shape——藏着的 Shape 照样占内存、照样排在 layer 的 children 里被遍历。
+   * 共用一份之后无论多少节点都只有这几个 Shape。代价是位置与显隐得由这里自己管：
+   * 它不在任何节点 Group 里，自然也不会跟着节点走。
+   *
+   * 需要在这些时机重算：选中变化（这里）、拖节点（`dragmove`）、改标题（`updateNodeTitle`，
+   * 矩形宽度变了）。按钮归 `nodeLayer` 而不是某个 Group——两者坐标系相同（都是画布坐标），
+   * 只是要额外把 Group 自己的位置加上去。
    */
-  private placeAddButton(group: Konva.Group, width: number): void {
-    group.findOne<Konva.Group>(".addBtn")?.x(width / 2 + ADD_BUTTON_OFFSET);
+  private updateAddButton(): void {
+    const layer = this.nodeLayer;
+    const id = this.soleNodeId;
+    const group = id != null ? this.groups.get(id) : null;
+    // 多选没有"那一个"节点可供它作用；拉线时高亮别的节点也不该把按钮带出来
+    if (!layer || !group || this.linking) {
+      this.addBtn?.visible(false);
+      return;
+    }
+    const btn = this.ensureAddButton();
+    const rect = group.findOne<Konva.Rect>("Rect");
+    const width = rect?.width() ?? NODE_MIN_WIDTH;
+    // 按钮中心离节点右边缘 ADD_BUTTON_OFFSET：圆自身的半径不算进去，
+    // 所以圆与节点之间还留着 ADD_BUTTON_OFFSET - ADD_BUTTON_RADIUS 的空隙
+    btn.position({ x: group.x() + width / 2 + ADD_BUTTON_OFFSET, y: group.y() });
+    btn.visible(true);
+    if (btn.getLayer() !== layer) layer.add(btn);
+    // 后重画的节点会排在它后面把它盖住。只在它真不在最顶时才提一次——
+    // 拖拽时这里每帧都跑，无脑 moveToTop 等于每帧把整层 children 重排一遍
+    const tops = layer.getChildren();
+    if (tops[tops.length - 1] !== btn) btn.moveToTop();
   }
 
-  /** 选中节点右侧的「+」按钮：点它新建一个与它关联的节点（只在选中时显示） */
-  private buildAddButton(): Konva.Group {
-    const btn = new Konva.Group({ name: "addBtn", y: 0, visible: false });
+  /** 那个按钮第一次被需要时才建出来（一直没单选过就一个 Shape 都不多） */
+  private ensureAddButton(): Konva.Group {
+    if (this.addBtn) return this.addBtn;
+    const btn = new Konva.Group({ name: "addBtn", visible: false });
     btn.add(
       new Konva.Circle({ radius: ADD_BUTTON_RADIUS, fill: "#1677ff" }),
-      // 加号：一横一竖，两条线都不吃事件（点击判定交给外层的圆）
-      new Konva.Line({ points: [-4, 0, 4, 0], stroke: "#fff", strokeWidth: 1.6, lineCap: "round", listening: false }),
-      new Konva.Line({ points: [0, -4, 0, 4], stroke: "#fff", strokeWidth: 1.6, lineCap: "round", listening: false }),
+      // 加号的十字：合成一条路径，省一个 Shape（不吃事件，点击判定交给上面那个圆）
+      new Konva.Path({
+        data: "M -4 0 L 4 0 M 0 -4 L 0 4",
+        stroke: "#fff",
+        strokeWidth: 1.6,
+        lineCap: "round",
+        listening: false,
+      }),
     );
     btn.on("click", (e) => {
       // 别冒泡到节点上再走一次选中流程（会把详情面板重新加载一遍）
@@ -768,6 +1017,7 @@ class KnowNet extends CtrlBase {
     });
     btn.on("mouseenter", () => this.setCursor("pointer"));
     btn.on("mouseleave", () => this.setCursor(""));
+    this.addBtn = btn;
     return btn;
   }
 
@@ -784,7 +1034,7 @@ class KnowNet extends CtrlBase {
    */
   private beginLink(sourceId: number): void {
     if (this.linking) return;
-    const source = this.nodes.find((n) => n.id === sourceId);
+    const source = this.nodesById.get(sourceId);
     if (!source) return;
     this.groups.get(sourceId)?.draggable(false);
     this.linking = { sourceId };
@@ -804,7 +1054,7 @@ class KnowNet extends CtrlBase {
   private updateTempLink(): void {
     const link = this.linking;
     if (!link || !this.tempLink || !this.stage) return;
-    const source = this.nodes.find((n) => n.id === link.sourceId);
+    const source = this.nodesById.get(link.sourceId);
     const point = this.stage.getRelativePointerPosition();
     if (!source || !point) return;
     this.tempLink.data(this.linePath(source, point));
@@ -847,6 +1097,7 @@ class KnowNet extends CtrlBase {
       const lineId = (await Msg.invoke("line.create", { nodeAId: sourceId, nodeBId: targetId })) as number;
       if (!lineId) return;
       this.lines.push({ id: lineId, nodeAId: sourceId, nodeBId: targetId, color: 0 });
+      this.reindex(); // 不走 render：邻接表要把这条新线登记到它两端上
       this.redrawLines();
     } catch {
       // 建不出来就算了：画布保持原样（连不上用户可以再拖一次）
@@ -877,11 +1128,59 @@ class KnowNet extends CtrlBase {
     return null;
   }
 
-  /** 某个形状是不是某条连线：连线在 lineLayer 里，与节点各占各的命中区域 */
-  private lineIdOfShape(shape: Konva.Node | null): number | null {
-    if (!shape || shape.name() !== "line") return null;
-    for (const [id, path] of this.lineShapes) if (path === shape) return id;
-    return null;
+  /**
+   * 画布坐标上落到了哪条连线：**点到线段的距离**不超过热区半宽就算命中，
+   * 好几条都够得着时取最近的那条（LINE_HIT_WIDTH 是宽度，取一半当半径）。
+   *
+   * 代价是每次判定 O(线数)。点击 / 右键 / 悬停这类**一次性**判断用得起
+   * （三万条线约一毫秒），它不在拖拽每帧的路径上（那条路走 `paintLiftPaths`，只算拎出来的那几条）。
+   */
+  private lineAtPoint(point: Konva.Vector2d): number | null {
+    let best: number | null = null;
+    let bestDistance = LINE_HIT_WIDTH / 2;
+    for (const line of this.lines) {
+      const a = this.nodesById.get(line.nodeAId);
+      const b = this.nodesById.get(line.nodeBId);
+      if (!a || !b) continue;
+      const distance = distanceToSegment(point, a, b);
+      if (distance <= bestDistance) {
+        bestDistance = distance;
+        best = line.id;
+      }
+    }
+    return best;
+  }
+
+  /**
+   * 指针底下是什么：**先看节点**（它画在连线上面），压着节点就答节点；
+   * 没压着再去看有没有落到哪条连线上。一次判定只走一次 Konva 的命中。
+   */
+  private pickAtPointer(): { nodeId: number | null; lineId: number | null } {
+    const stage = this.stage;
+    if (!stage) return { nodeId: null, lineId: null };
+    const pointer = stage.getPointerPosition();
+    const point = stage.getRelativePointerPosition();
+    if (!pointer || !point) return { nodeId: null, lineId: null };
+    const nodeId = this.nodeIdOfShape(stage.getIntersection(pointer) ?? null);
+    if (nodeId != null) return { nodeId, lineId: null };
+    return { nodeId: null, lineId: this.lineAtPoint(point) };
+  }
+
+  /** 指针底下有没有连线。压在某个节点上时算节点优先，不看它底下穿过的线 */
+  private lineIdAtPointer(): number | null {
+    return this.pickAtPointer().lineId;
+  }
+
+  /** 屏幕（浏览器客户区）坐标处有没有连线：右键菜单用它，规则同 lineIdAtPointer */
+  private lineHitAt(clientX: number, clientY: number): number | null {
+    const stage = this.stage;
+    if (!stage) return null;
+    const point = this.toCanvasPoint(clientX, clientY);
+    if (!point) return null;
+    const rect = stage.container().getBoundingClientRect();
+    const hit = stage.getIntersection({ x: clientX - rect.left, y: clientY - rect.top });
+    if (this.nodeIdOfShape(hit ?? null) != null) return null;
+    return this.lineAtPoint(point);
   }
 
   /**
@@ -918,6 +1217,7 @@ class KnowNet extends CtrlBase {
       return;
     }
     this.lines = this.lines.filter((l) => l.id !== id);
+    this.reindex(); // 不走 render，索引自己对齐一次
     if (this.selectedLineId === id) this.selectLine(null);
     this.redrawLines();
   }
@@ -1034,7 +1334,7 @@ class KnowNet extends CtrlBase {
       if (id === drag.id) continue;
       const x = base.x + dx;
       const y = base.y + dy;
-      const node = this.nodes.find((n) => n.id === id);
+      const node = this.nodesById.get(id);
       if (node) {
         node.x = x;
         node.y = y;
@@ -1049,7 +1349,7 @@ class KnowNet extends CtrlBase {
    * 新节点建好后选中它并直接进入标题编辑，用户可以马上敲名字。
    */
   private async createRelatedNode(sourceId: number): Promise<void> {
-    const source = this.nodes.find((n) => n.id === sourceId);
+    const source = this.nodesById.get(sourceId);
     if (!source || this.listId == null) return;
     const rect = this.groups.get(sourceId)?.findOne<Konva.Rect>("Rect");
     const sourceWidth = rect?.width() ?? NODE_MIN_WIDTH;
@@ -1094,6 +1394,7 @@ class KnowNet extends CtrlBase {
   /** 新节点入库之后这一段是共用的：进本地数据、重画、选中它并直接进入标题编辑（用户可以马上敲名字） */
   private adoptNewNode(nodeId: number, x: number, y: number): void {
     this.nodes.push({ id: nodeId, title: DEFAULT_TITLE, x, y, color: 0 });
+    this.reindex(); // 不走 render：下面紧接着就要按 id 取它（选中 + 进标题编辑）
     this.render();
     StatusBar.setCount(this.nodes.length);
     this.selectNode(nodeId);
@@ -1119,7 +1420,7 @@ class KnowNet extends CtrlBase {
    * 输入框按当前缩放算出位置与大小；编辑期间先关掉画布平移，免得它与节点错位。
    */
   private beginTitleEdit(id: number): void {
-    const node = this.nodes.find((n) => n.id === id);
+    const node = this.nodesById.get(id);
     const group = this.groups.get(id);
     if (!node || !group || !this.stage) return;
     const scale = this.stage.scaleX();
@@ -1179,7 +1480,7 @@ class KnowNet extends CtrlBase {
   }
 
   private async commitTitle(id: number, title: string): Promise<void> {
-    const node = this.nodes.find((n) => n.id === id);
+    const node = this.nodesById.get(id);
     if (!node || node.title === title) return;
     try {
       await Msg.invoke("node.update", { id, title });
@@ -1305,7 +1606,7 @@ class KnowNet extends CtrlBase {
   /** 把某个节点摆到视口正中：只挪 stage 的位置（缩放不动），节点自己的 x / y 不变 */
   private centerNode(id: number): void {
     const stage = this.stage;
-    const node = this.nodes.find((n) => n.id === id);
+    const node = this.nodesById.get(id);
     if (!stage || !node) return;
     const scale = stage.scaleX();
     stage.position({ x: stage.width() / 2 - node.x * scale, y: stage.height() / 2 - node.y * scale });

@@ -83,7 +83,7 @@ list.create    node.move    line.remove    detail.save    win.minimize
 | method | args | 说明 |
 | --- | --- | --- |
 | `list.list` | – | 取所有知识 |
-| `list.open` | `{ id }` | **聚合**：一次取回该知识的全部**节点 + 连线**（点列表项时用，省一次往返） |
+| `list.open` | `{ id }` | **聚合**：一次取回该知识的全部**节点 + 连线**（**不含详情正文**，见下方约定；点列表项时用，省一次往返） |
 | `list.create` | `{ name }` | 新建知识 |
 | `list.update` | `{ id, name }` | 重命名知识 |
 | `list.remove` | `{ id }` | 删除知识（连带节点 / 连线 / 详情） |
@@ -101,6 +101,21 @@ list.create    node.move    line.remove    detail.save    win.minimize
 | `detail.save` | `{ target, id, content }` | 保存详情（前端防抖后调用） |
 | `setting.get` | `{ key }` | 读设置项 |
 | `setting.set` | `{ key, value }` | 写设置项 |
+
+> **详情正文永远不顺带返回（重要约定，别改）**
+>
+> 上面那些列表 / 聚合 method 带回来的每一项**只有 `detailId`，没有 `content`**。
+> 详情是富文本大字段。一张网可能有成千上万个对象，全带出来的话开一张网就要传几 MB 正文，
+> 而用户往往一个都不展开——**这正是 `know_detail` 独立成表的原因**（见 [40](./40-data-model.md)）。
+>
+> 正文只在**用户真的要看**时才由 `detail.get` 取那**一条**。目前全仓只有一个调用点
+> `KnowDetail.load()`，触发时机：
+> - **展开面板时**（`setOpen(true)`）才取；
+> - 面板**收着**时切换选中对象（`switchTo`）**一次查询都不发**，只更新 `target`；
+> - 面板已展开的情况下切对象（`switchTo`）才重新取；
+> - 重复点同一个对象不重取（`unchanged` 短路），也免得把用户正在敲的内容冲掉。
+>
+> 别为了"省一次往返"把 `content` 塞进 `list.open` / `node.list` / `line.list`——那是把设计倒回去。
 
 ### 窗口类方法统一加 `win.` 前缀（**已确定改名**）
 

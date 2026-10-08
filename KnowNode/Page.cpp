@@ -240,7 +240,7 @@ Page::Page(Window* win, ComPtr<ICoreWebView2>& webview) :win{ win }, webview{ we
 #ifdef _DEBUG
 	// 调试：用 vite 开发服务器，改前端不必重新编译 exe
 	webview->Navigate(L"http://localhost:5173");
-	webview->OpenDevToolsWindow();
+	//webview->OpenDevToolsWindow();
 #else
 	// 发布：前端产物编进了 exe 资源（见 Resource.rc 里那块 dist 清单），走虚拟域名——
 	// 请求由 onRequest 从资源里应答，一个 exe 就能独立跑，不依赖本机任何文件
