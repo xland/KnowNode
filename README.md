@@ -4,7 +4,9 @@
 
 人脑海里的知识不是分门别类的目录树，而是一张网：最小单位是一个**知识节点**，节点与节点之间有**关联**，众多节点通过关联织成一张知识网络。KnowNode 就是以这种形式管理知识的。
 
-KnowNode 内所有内容都保存在**本机**，不依赖网络。
+- KnowNode 内所有内容都保存在**本机**，不依赖网络。
+- 编译产物仅一个 exe 文件，3.8 MB
+- 下载地址：[https://github.com/xland/KnowNode](https://github.com/xland/KnowNode)
 
 ![界面一览](./Doc/shot.png)
 

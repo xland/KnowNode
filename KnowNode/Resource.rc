@@ -19,8 +19,8 @@ logo.svg RCDATA "..\\UI\\dist\\logo.svg"
 
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 0, 0, 3, 0
-PRODUCTVERSION 0, 0, 3, 0
+FILEVERSION 0, 0, 4, 0
+PRODUCTVERSION 0, 0, 4, 0
 FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
 	FILEFLAGS 0x1L
@@ -37,12 +37,12 @@ BEGIN
 		BEGIN
 			VALUE "CompanyName", "GitHub xland"
 			VALUE "FileDescription", "KnowNode"
-			VALUE "FileVersion", "0.0.3.0"
+			VALUE "FileVersion", "0.0.4.0"
 			VALUE "InternalName", "KnowNode.exe"
 			VALUE "LegalCopyright", "Copyright (C) LiuXiaolun 2026"
 			VALUE "OriginalFilename", "KnowNode.exe"
 			VALUE "ProductName", "KnowNode"
-			VALUE "ProductVersion", "0.0.3.0"
+			VALUE "ProductVersion", "0.0.4.0"
 		END
 	END
 	BLOCK "VarFileInfo"
