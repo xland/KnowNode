@@ -1,47 +1,13 @@
 #include "Util.h"
 
-#include <chrono>
+#include <windows.h>
 
-std::wstring Util::convertToWStr(const char* str)
-{
-    if (!str) return std::wstring();
-    int count = MultiByteToWideChar(CP_UTF8, 0, str, -1, 0, 0);
-    if (count == 0) return std::wstring();
-    std::vector<wchar_t> buffer(count);
-    MultiByteToWideChar(CP_UTF8, 0, str, -1, buffer.data(), count);
-    return std::wstring(buffer.data(), buffer.size() - 1);
-}
-std::string Util::convertToStr(const wchar_t* str)
-{
-    if (!str) return std::string();
-    int count = WideCharToMultiByte(CP_UTF8, 0, str, -1, nullptr, 0, nullptr, nullptr);
-    if (count == 0) return std::string();
-    std::vector<char> buffer(count);
-    WideCharToMultiByte(CP_UTF8, 0, str, -1, buffer.data(), count, nullptr, nullptr);
-    return std::string(buffer.data(), buffer.size() - 1);
-}
-JsonObject Util::msgArgs(const JsonObject& param)
-{
-    if (param.HasKey(L"args") && param.GetNamedValue(L"args").ValueType() == JsonValueType::Object)
-        return param.GetNamedObject(L"args");
-    return JsonObject{};
-}
-std::wstring Util::argString(const JsonObject& args, const wchar_t* key)
-{
-    if (!args.HasKey(key)) return {};
-    auto value = args.GetNamedValue(key);
-    return value.ValueType() == JsonValueType::String ? std::wstring(value.GetString()) : std::wstring{};
-}
-sqlite3_int64 Util::argNumber(const JsonObject& args, const wchar_t* key)
-{
-    if (!args.HasKey(key)) return Util::NO_NUMBER;
-    auto value = args.GetNamedValue(key);
-    return value.ValueType() == JsonValueType::Number
-        ? static_cast<sqlite3_int64>(value.GetNumber())
-        : Util::NO_NUMBER;
-}
 long long Util::nowMillis()
 {
-    return std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
+    FILETIME ft;
+    GetSystemTimeAsFileTime(&ft);
+    ULARGE_INTEGER value;
+    value.LowPart = ft.dwLowDateTime;
+    value.HighPart = ft.dwHighDateTime;
+    return static_cast<long long>(value.QuadPart / 10000ULL - 11644473600000LL);
 }

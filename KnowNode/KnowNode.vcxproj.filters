@@ -15,87 +15,53 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="main.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Env.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Page.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Util.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Window.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="SQLite\sqlite3.c">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Db\Db.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Db\KnowList.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Db\KnowNode.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Db\KnowLine.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Db\KnowDetail.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
-    <ClCompile Include="Db\Setting.cpp">
-      <Filter>源文件</Filter>
-    </ClCompile>
+    <ClCompile Include="Canvas.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Category.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Detail.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="KnWindow.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Splitter.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="StatusBar.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="TitleBar.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="GraphView.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="RichDocStore.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="main.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Env.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Util.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="SQLite\sqlite3.c"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Db\Db.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Db\KnowList.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Db\KnowNode.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Db\KnowLine.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Db\KnowDetail.cpp"><Filter>源文件</Filter></ClCompile>
+    <ClCompile Include="Db\Setting.cpp"><Filter>源文件</Filter></ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <None Include="packages.config" />
+    <ClInclude Include="Canvas.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Category.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Detail.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="KnWindow.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Splitter.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="StatusBar.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="TitleBar.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="GraphView.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="RichDocStore.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Env.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Util.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="SQLite\sqlite3.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Db\Db.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Db\DbStmt.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Db\KnowList.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Db\KnowNode.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Db\KnowLine.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Db\KnowDetail.h"><Filter>头文件</Filter></ClInclude>
+    <ClInclude Include="Db\Setting.h"><Filter>头文件</Filter></ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Env.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Window.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Page.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Util.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="SQLite\sqlite3.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Db\Db.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Db\DbStmt.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Db\KnowList.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Db\KnowNode.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Db\KnowLine.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Db\KnowDetail.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-    <ClInclude Include="Db\Setting.h">
-      <Filter>头文件</Filter>
-    </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <ResourceCompile Include="Resource.rc">
-      <Filter>资源文件</Filter>
-    </ResourceCompile>
+    <ResourceCompile Include="Resource.rc"><Filter>资源文件</Filter></ResourceCompile>
+    <None Include="Resources\logo.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\ToolbarIcons\listBullet.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\ToolbarIcons\quote.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\ToolbarIcons\code.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\ToolbarIcons\image.svg"><Filter>资源文件</Filter></None>
   </ItemGroup>
 </Project>

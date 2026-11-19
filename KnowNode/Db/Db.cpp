@@ -1,7 +1,10 @@
+#include <windows.h>
+
+#include "DUI/DUI.h"
+
 #include "Db.h"
 #include "DbStmt.h"
 #include "../Env.h"
-#include "../Util.h"
 
 Db& Db::instance()
 {
@@ -44,8 +47,8 @@ void Db::execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what)
     {
         // 静态函数里拿不到 instance()，直接问连接要原因
         auto reason = sqlite3_errmsg(conn);
-        auto detail = what + L"\n\n" + Util::convertToWStr(reason ? reason : "")
-            + L"\n\nSQL：" + Util::convertToWStr(sql);
+        auto detail = what + L"\n\n" + dui::Utf8ToWide(reason ? reason : "")
+            + L"\n\nSQL：" + dui::Utf8ToWide(sql);
         fatal(detail);
     }
 }
@@ -53,8 +56,8 @@ void Db::execOrFatal(sqlite3* conn, const char* sql, const std::wstring& what)
 void Db::fatal(const std::wstring& detail)
 {
     auto msg = std::wstring{ L"数据库初始化失败\n\n" } + detail;
-    MessageBox(nullptr, msg.c_str(), L"系统提示", MB_OK | MB_ICONERROR);
-    ExitProcess(-1);
+    ::MessageBoxW(nullptr, msg.c_str(), L"系统提示", MB_OK | MB_ICONERROR);
+    ExitProcess(1);
 }
 
 void Db::open()
