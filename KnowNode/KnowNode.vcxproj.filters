@@ -59,6 +59,10 @@
   <ItemGroup>
     <ResourceCompile Include="Resource.rc"><Filter>资源文件</Filter></ResourceCompile>
     <None Include="Resources\logo.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\center.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\detailExpand.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\detailCollapse.svg"><Filter>资源文件</Filter></None>
+    <None Include="Resources\addList.svg"><Filter>资源文件</Filter></None>
     <None Include="Resources\ToolbarIcons\listBullet.svg"><Filter>资源文件</Filter></None>
     <None Include="Resources\ToolbarIcons\quote.svg"><Filter>资源文件</Filter></None>
     <None Include="Resources\ToolbarIcons\code.svg"><Filter>资源文件</Filter></None>

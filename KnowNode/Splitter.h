@@ -6,7 +6,7 @@
 
 // 水平分隔条：封装拖拽捕获，把水平位移（DIP）回调给持有者。
 // 面板宽度的最小/最大约束由持有者决定，控件本身不耦合业务。
-// 命中区即 MeasureContent 返回的宽度（6 DIP）；平时透明，hover 高亮由持有者设置。
+// 命中区即 MeasureContent 返回的宽度（4 DIP，同老项目 .splitter）；平时透明，hover 高亮由持有者设置。
 class Splitter final : public dui::Element
 {
 public:
@@ -17,7 +17,7 @@ public:
 protected:
     dui::Vec2 MeasureContent(const dui::StyleContext&, const dui::Vec2&) const override
     {
-        return { 6.f, 0.f };
+        return { 4.f, 0.f };
     }
     bool HandlePointerDown(dui::PointerEvent& ev) override;
     bool HandlePointerMove(dui::PointerEvent& ev) override;

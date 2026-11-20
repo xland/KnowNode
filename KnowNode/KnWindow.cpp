@@ -13,7 +13,7 @@ namespace
     constexpr float kListMin = 300.f;
     constexpr float kDetailMin = 300.f;
     constexpr float kCanvasMin = 500.f;
-    constexpr float kSplitterWidth = 6.f;    // splitter 命中区宽度（可见细线居中，见 Splitter::OnPaint）
+    constexpr float kSplitterWidth = 4.f;    // splitter 命中区宽度（同老项目 .splitter）
     constexpr float kHandleWidth = 14.f;
 
     float LoadWidth(const char* key, float fallback, float minWidth)
@@ -33,7 +33,6 @@ namespace
 
 void KnWindow::OnCreate()
 {
-    app_ = App();
     listWidth_ = LoadWidth("know_list.width", kListMin, kListMin);
     BuildUi();
     detail_->SetWidth(LoadWidth("know_detail.width", 600.f, kDetailMin));
@@ -42,9 +41,6 @@ void KnWindow::OnCreate()
     if (!lists.empty()) OpenList(lists.front().id);
     category_->Refresh();
     ApplyPanelWidths();
-
-    if (app_ != nullptr)
-        app_->SetTimer(300, [this] { detail_->Flush(); });
 }
 
 bool KnWindow::OnClosing()
@@ -131,6 +127,7 @@ void KnWindow::BuildUi()
     auto splitterStyle = [] {
         return dui::Style()
             .Width(kSplitterWidth).FlexShrink(0.f)
+            .Background(0xFFEEEEEE)
             .Cursor(dui::Cursor::SizeWE);
     };
     // 列表在最左：右移 splitter → 列表变宽(+)；详情在最右：右移 → 详情变窄(−)。
@@ -146,8 +143,7 @@ void KnWindow::BuildUi()
     };
 
     listSplitter_ = body->AddChild<Splitter>(splitterStyle());
-    listSplitter_->When(dui::State::Hover, dui::Style().Background(0xFFF2F6F8));
-    listSplitter_->When(dui::State::Pressed, dui::Style().Background(0xFFF2F6F8));
+    listSplitter_->When(dui::State::Hover, dui::Style().Background(0xFFdddddd));
     bindSplitter(listSplitter_, &listWidth_, 1.f);
 
     canvas_ = body->AddChild<Canvas>();

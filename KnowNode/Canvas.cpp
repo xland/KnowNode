@@ -1,21 +1,37 @@
 #include "Canvas.h"
 
+#include <algorithm>
+
+#include "DUI/UI/Svg.h"
+
 #include "Db/KnowLine.h"
 #include "Db/KnowNode.h"
 
 namespace
 {
+    bool LoadSvgResource(dui::Svg* svg, const wchar_t* resourceName)
+    {
+        HRSRC res = FindResourceW(nullptr, resourceName, RT_RCDATA);
+        if (res == nullptr) return false;
+        HGLOBAL mem = LoadResource(nullptr, res);
+        if (mem == nullptr) return false;
+        const void* data = LockResource(mem);
+        const DWORD bytes = SizeofResource(nullptr, res);
+        if (data == nullptr || bytes == 0) return false;
+        return svg->LoadSvgMemory(data, static_cast<uint32_t>(bytes));
+    }
+
     const wchar_t* ColorName(int color)
     {
         switch (color)
         {
         case 0: return L"无";
-        case 1: return L"蓝";
-        case 2: return L"绿";
-        case 3: return L"橙";
-        case 4: return L"红";
-        case 5: return L"紫";
-        case 6: return L"青";
+        case 1: return L"红";
+        case 2: return L"橙";
+        case 3: return L"黄";
+        case 4: return L"绿";
+        case 5: return L"蓝";
+        case 6: return L"紫";
         default: return L"无";
         }
     }
@@ -24,28 +40,8 @@ namespace
 Canvas::Canvas()
 {
     SetStyle(dui::Style()
-        .FlexGrow(1.f).FlexDirection(dui::FlexDirection::Column));
-
-    auto* head = AddChild<dui::Panel>(dui::Style()
-        .Height(42.f).FlexShrink(0.f)
-        .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
-        .Gap(8.f).Padding(dui::Thickness(0.f, 10.f))
-        .Background(0xFFFFFFFF));
-
-    auto* searchBox = head->AddChild<dui::TextBox>(dui::Style()
-        .Width(180.f).Height(28.f).BorderWidth(1.f).BorderColor(0xFFD1D5DB)
-        .CornerRadius(4.f).Padding(dui::Thickness(0.f, 8.f)).FontSize(13.f));
-    searchBox->OnTextChanged([this](const dui::String& text) { graph_->SetSearch(text); });
-
-    auto* addNode = head->AddChild<dui::Button>(L"＋ 节点", dui::Style()
-        .FontSize(13.f).Color(0xFF2563EB).Padding(dui::Thickness(4.f, 8.f))
-        .Cursor(dui::Cursor::Hand));
-    addNode->OnClick([this](dui::PointerEvent&) { CreateNode(80.0, 80.0); });
-
-    auto* resetView = head->AddChild<dui::Button>(L"复位视图", dui::Style()
-        .FontSize(13.f).Color(0xFF4B5563).Padding(dui::Thickness(4.f, 8.f))
-        .Cursor(dui::Cursor::Hand));
-    resetView->OnClick([this](dui::PointerEvent&) { graph_->ResetView(); });
+        .FlexGrow(1.f).Position(dui::Position::Relative)
+        .FlexDirection(dui::FlexDirection::Column));
 
     graph_ = AddChild<GraphView>(dui::Style()
         .Position(dui::Position::Relative)
@@ -56,7 +52,7 @@ Canvas::Canvas()
     {
         ShowGraphMenu(pos, nodeId, lineId, mx, my);
     });
-    graph_->OnOpenNode([this](int64_t nodeId) { RenameNode(nodeId); });
+    graph_->OnOpenNode([this](int64_t nodeId) { graph_->BeginTitleEdit(nodeId); });
     graph_->OnNodeMoved([this](int64_t id, double x, double y)
     {
         KnowNode::instance().move(id, x, y);
@@ -65,12 +61,54 @@ Canvas::Canvas()
     {
         if (onSelectItem_) onSelectItem_(nodeId, lineId);
     });
+    graph_->OnAddNode([this](int64_t nodeId) { CreateRelatedNode(nodeId); });
+    graph_->OnCommitTitle([this](int64_t nodeId, const dui::String& text)
+    {
+        KnowNodeItem item;
+        if (!KnowNode::instance().get(nodeId, item)) return;
+        const int64_t oldDetail = item.detailId;
+        KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
+        graph_->UpdateNodeTitle(nodeId, text);
+        if (onDetailTitle_) onDetailTitle_(oldDetail, text);
+    });
+
+    // 悬浮卡片样式（老项目 .knowNetSearch / .knowNetCenter）：白底、1px #e5e6eb、
+    // 圆角 3、阴影 0 1px 4px rgba(0,0,0,.08)。两者绝对定位浮在画布之上。
+    auto cardStyle = [] {
+        return dui::Style()
+            .Height(26.f).FlexShrink(0.f)
+            .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
+            .Background(0xFFFFFFFF).BorderWidth(1.f).BorderColor(0xFFE5E6EB)
+            .CornerRadius(3.f).Shadow(4.f, 0x14000000, 0.f, 1.f);
+    };
+
+    auto* search = AddChild<dui::Panel>(cardStyle()
+        .Position(dui::Position::Absolute).Left(10.f).Top(8.f).ZIndex(4)
+        .Padding(dui::Thickness(10.f, 6.f, 10.f, 6.f)));
+    auto* searchBox = search->AddChild<dui::TextBox>(dui::Style()
+        .Width(160.f).Height(20.f).BorderWidth(0.f).Background(0)
+        .FontSize(12.f).Color(0xFF1F2329));
+    searchBox->OnTextChanged([this](const dui::String& text) { graph_->SetSearch(text); });
+    auto* searchIcon = search->AddChild<dui::Icon>(dui::Style()
+        .Width(14.f).Height(14.f).Color(0xFF6B7280).Cursor(dui::Cursor::Hand));
+    searchIcon->SetIcon(dui::IconName::Search);
+    searchIcon->When(dui::State::Hover, dui::Style().Color(0xFF1677FF));
+
+    // 右上角「回到中心」：老项目 icon-center 四角取景框，用提供的 SVG 资源。
+    auto* center = AddChild<dui::Panel>(cardStyle()
+        .Position(dui::Position::Absolute).Right(10.f).Top(8.f).ZIndex(4)
+        .Width(26.f).JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
+        .Cursor(dui::Cursor::Hand));
+    auto* centerIcon = center->AddChild<dui::Svg>(dui::Style().Width(14.f).Height(14.f));
+    LoadSvgResource(centerIcon, L"ICON_CENTER");
+    center->OnClick([this](dui::PointerEvent&) { graph_->ResetView(); });
 }
 
 void Canvas::SetList(int64_t listId)
 {
     listId_ = listId;
     Refresh();
+    graph_->RequestCenter();   // 仅切换知识时居中；普通 Refresh 不动视图
 }
 
 void Canvas::Refresh()
@@ -159,18 +197,28 @@ void Canvas::CreateNode(double x, double y)
     const int64_t id = KnowNode::instance().add(listId_, x, y);
     if (id == 0) return;
     Refresh();
-    RenameNode(id);
+    graph_->BeginTitleEdit(id);
 }
 
 void Canvas::CreateRelatedNode(int64_t nodeId)
 {
     KnowNodeItem item;
     if (!KnowNode::instance().get(nodeId, item)) return;
-    const int64_t id = KnowNode::instance().add(listId_, item.x + 180.0, item.y + 90.0);
+    // 老项目：新节点在源节点右侧、y 对齐；源宽按标题字符数近似（同 GraphView::NodeWidth）。
+    const dui::String title = dui::Utf8ToWide(item.title.c_str());
+    const float srcWidth = std::max(72.f, std::min(220.f,
+        static_cast<float>(title.size()) * 13.f + 24.f));
+    const double x = item.x + srcWidth + 60.0;
+    const int64_t id = KnowNode::instance().add(listId_, x, item.y);
     if (id == 0) return;
     KnowLine::instance().add(nodeId, id);
     Refresh();
-    RenameNode(id);
+    graph_->BeginTitleEdit(id);
+}
+
+bool Canvas::HandleTabKey()
+{
+    return graph_->HandleTabKey();
 }
 
 void Canvas::DeleteNode(int64_t nodeId)

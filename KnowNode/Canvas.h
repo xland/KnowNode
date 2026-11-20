@@ -25,6 +25,7 @@ public:
     void OnNodeCount(std::function<void(size_t)> fn) { onNodeCount_ = std::move(fn); }
     void SetTextDialog(TextDialogFn fn) { textDialog_ = std::move(fn); }
     void SetMenuPopup(MenuPopupFn fn) { menuPopup_ = std::move(fn); }
+    bool HandleTabKey();   // 全局 Tab：以选中节点为源新建关联节点
 
 private:
     void ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double modelX, double modelY);

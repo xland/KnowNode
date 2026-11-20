@@ -41,8 +41,6 @@ private:
                         std::function<void(const dui::String&)> callback);
     void HideTextDialog();
 
-    dui::Application* app_ = nullptr;
-
     Category* category_ = nullptr;
     Canvas* canvas_ = nullptr;
     Detail* detail_ = nullptr;

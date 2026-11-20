@@ -9,7 +9,7 @@ namespace
 {
     namespace rt = dui::richtext;
 
-    constexpr float kSplitterWidth = 6.f;
+    constexpr float kSplitterWidth = 4.f;
     constexpr float kHandleWidth = 14.f;
 
     bool LoadSvgResource(dui::Svg* svg, const wchar_t* resourceName)
@@ -42,15 +42,15 @@ Detail::Detail()
         .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
         .Background(0xFFF1F2F4).Cursor(dui::Cursor::Hand));
     handle_->When(dui::State::Hover, dui::Style().Background(0xFFE5E7EB));
-    arrow_ = handle_->AddChild<dui::Text>(L"▶", dui::Style()
-        .FontSize(12.f).Color(0xFF6B7280).TextAlign(dui::TextAlign::Center));
+    arrow_ = handle_->AddChild<dui::Svg>(dui::Style()
+        .Width(12.f).Height(12.f).Cursor(dui::Cursor::Hand));
+    LoadSvgResource(arrow_, L"ICON_DETAIL_EXPAND");   // 默认折叠态 → 展开按钮（向左箭头）
     handle_->OnClick([this](dui::PointerEvent&) { Toggle(); });
 
     splitter_ = AddChild<Splitter>(dui::Style()
         .Width(kSplitterWidth).FlexShrink(0.f)
         .Cursor(dui::Cursor::SizeWE));
-    splitter_->When(dui::State::Hover, dui::Style().Background(0xFFF2F6F8));
-    splitter_->When(dui::State::Pressed, dui::Style().Background(0xFFF2F6F8));
+    splitter_->When(dui::State::Hover, dui::Style().Background(0xFFBBBBBB));
     splitter_->OnDragStart([this] { dragBase_ = width_; });
     splitter_->OnDrag([this](float dx) { width_ = dragBase_ - dx; if (onResize_) onResize_(); });
     splitter_->OnDragEnd([this] { if (onWidthCommitted_) onWidthCommitted_(); });
@@ -105,10 +105,9 @@ Detail::Detail()
     iconTool(L"ICON_CODE", [this] { AppendBlock(rt::BlockKind::Code); });
     iconTool(L"ICON_IMAGE", [this] { InsertImageFile(); });
 
-    auto* scroller = panel_->AddChild<dui::Scroller>(dui::Style().FlexGrow(1.f));
-    auto* paper = scroller->AddChild<dui::Panel>(dui::Style()
-        .Padding(dui::Thickness(18.f)).Background(0xFFFFFFFF));
-    editor_ = paper->AddChild<dui::RichEditor>();
+    scroller_ = panel_->AddChild<dui::Scroller>(dui::Style().FlexGrow(1.f));
+    editor_ = scroller_->AddChild<dui::RichEditor>(dui::Style()
+        .FlexGrow(1.f).Padding(dui::Thickness(18.f)).Background(0xFFFFFFFF));
     editor_->OnKeyDown([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnChar([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnPointerUp([this](dui::PointerEvent&) { MarkDirty(); });
@@ -252,7 +251,7 @@ void Detail::ApplyLayout()
 {
     handle_->Set(dui::Prop::Width, hasKnowledge_ ? kHandleWidth : 0.f);
     handle_->Set(dui::Prop::Visible, hasKnowledge_ ? 1u : 0u);
-    arrow_->SetText(expanded_ ? L"◀" : L"▶");
+    LoadSvgResource(arrow_, expanded_ ? L"ICON_DETAIL_COLLAPSE" : L"ICON_DETAIL_EXPAND");
     splitter_->Set(dui::Prop::Width, expanded_ ? kSplitterWidth : 0.f);
     splitter_->Set(dui::Prop::Visible, expanded_ ? 1u : 0u);
     panel_->Set(dui::Prop::Width, expanded_ ? width_ : 0.f);

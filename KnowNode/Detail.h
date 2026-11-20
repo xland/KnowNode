@@ -42,10 +42,11 @@ private:
     void LoadDoc(int64_t detailId);
 
     dui::Panel* handle_ = nullptr;
-    dui::Text* arrow_ = nullptr;
+    dui::Svg* arrow_ = nullptr;
     Splitter* splitter_ = nullptr;
     dui::Panel* panel_ = nullptr;
     dui::Text* title_ = nullptr;
+    dui::Scroller* scroller_ = nullptr;
     dui::RichEditor* editor_ = nullptr;
 
     Kind kind_ = Kind::None;
