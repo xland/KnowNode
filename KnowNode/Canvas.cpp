@@ -62,6 +62,10 @@ Canvas::Canvas()
         if (onSelectItem_) onSelectItem_(nodeId, lineId);
     });
     graph_->OnAddNode([this](int64_t nodeId) { CreateRelatedNode(nodeId); });
+    graph_->OnLinkNodes([this](int64_t a, int64_t b)
+    {
+        if (KnowLine::instance().add(a, b) != 0) Refresh();
+    });
     graph_->OnCommitTitle([this](int64_t nodeId, const dui::String& text)
     {
         KnowNodeItem item;

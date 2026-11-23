@@ -7,7 +7,7 @@ int WINAPI wWinMain(HINSTANCE, HINSTANCE, PWSTR, int)
 {
     Env::init();
 
-    dui::Application app;
+    dui::App app;
     KnWindow window;
     return app.Run(window);
 }

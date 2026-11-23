@@ -48,6 +48,10 @@ public:
     using AddNodeFn = std::function<void(int64_t sourceNodeId)>;
     void OnAddNode(AddNodeFn fn) { addNode_ = std::move(fn); }
 
+    // 从节点边缘拉线到另一节点松手 → 请求建立无向关联（a、b 为节点 id）。
+    using LinkNodesFn = std::function<void(int64_t a, int64_t b)>;
+    void OnLinkNodes(LinkNodesFn fn) { linkNodes_ = std::move(fn); }
+
     using CommitTitleFn = std::function<void(int64_t nodeId, const dui::String& text)>;
     void OnCommitTitle(CommitTitleFn fn) { commitTitle_ = std::move(fn); }
 
@@ -79,6 +83,11 @@ private:
 
     int HitNode(const dui::Vec2& local) const;
     int HitLine(const dui::Vec2& local) const;
+    // 节点矩形边缘 6px（屏幕恒定，按 zoom 折算回 local）命中：返回边缘节点索引，否则 -1。
+    int HitNodeEdge(const dui::Vec2& local) const;
+    // 拉线候选目标：非源节点、且与源尚未连过（无向）。返回节点索引，否则 -1。
+    int LinkTargetAt(const dui::Vec2& local) const;
+    void SetCursorIfChanged(dui::Cursor c);
     void RefreshLabels();
     void CenterView();     // 节点包围盒中心置于视口正中（按钮与加载后共用）
 
@@ -100,11 +109,15 @@ private:
 
     bool draggingNode_ = false;
     bool panning_ = false;
+    bool linking_ = false;          // 正在从节点边缘拉线
     int dragIndex_ = -1;
-    int64_t dragNodeId_ = 0;
+    int64_t dragNodeId_ = 0;        // 拉线源节点 / 被拖节点 id
+    int linkHoverIndex_ = -1;       // 拉线过程中指针下的目标节点（-1 = 无）
     dui::Vec2 dragOffset_{ 0.f, 0.f };
+    dui::Vec2 linkPoint_{ 0.f, 0.f };  // 预览线终点（local 坐标）
     dui::Vec2 lastLocal_{ 0.f, 0.f };
     dui::Vec2 pressLocal_{ 0.f, 0.f };
+    dui::Cursor cursor_ = dui::Cursor::Arrow;
 
     uint64_t lastClickMs_ = 0;
     int64_t lastClickNode_ = 0;
@@ -114,5 +127,6 @@ private:
     NodeMovedFn nodeMoved_;
     SelectFn select_;
     AddNodeFn addNode_;
+    LinkNodesFn linkNodes_;
     CommitTitleFn commitTitle_;
 };

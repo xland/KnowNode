@@ -59,6 +59,15 @@ namespace
             | static_cast<uint8_t>((mark & 0xFF) * kDarken + 0.5f);
     }
 
+    // 用 DUI 官方虚线 API 画两点虚线：实 7 / 空 5。
+    void StrokeDashedLine(dui::graphics::Painter& p, dui::Vec2 a, dui::Vec2 b,
+                          dui::Color color, float widthDip, float scale)
+    {
+        const dui::Vec2 pts[2] = { a, b };
+        dui::graphics::StrokeDashedPolyline(p, pts, 2, color, widthDip,
+                                            dui::Dash::Custom(7.f, 5.f), scale);
+    }
+
     float DistanceToSegment(const dui::Vec2& p, const dui::Vec2& a, const dui::Vec2& b)
     {
         const float dx = b.x - a.x;
@@ -86,6 +95,7 @@ GraphView::GraphView()
     {
         if (ev.key == VK_TAB && HandleTabKey()) ev.handled = true;
     });
+    OnPointerLeave([this](dui::PointerEvent&) { SetCursorIfChanged(dui::Cursor::Arrow); });
 
     editor_ = AddChild<dui::TextBox>(dui::Style()
         .Position(dui::Position::Absolute)
@@ -133,7 +143,7 @@ float GraphView::NodeHeight()
 const GraphNodeView* GraphView::AddButtonNode() const
 {
     if (addNode_ == nullptr || selectedNode_ == 0 || selectedLine_ != 0 || draggingNode_
-        || editingNodeId_ != 0)
+        || linking_ || editingNodeId_ != 0)
         return nullptr;
     for (const GraphNodeView& n : nodes_)
         if (n.id == selectedNode_) return &n;
@@ -170,6 +180,47 @@ int GraphView::HitNode(const dui::Vec2& local) const
             return static_cast<int>(i);
     }
     return -1;
+}
+
+int GraphView::HitNodeEdge(const dui::Vec2& local) const
+{
+    // 边缘热区恒定屏幕 6px；local 已是缩放后的坐标，再按 zoom 折算回屏幕距离比较。
+    const float band = 6.f * zoom_;
+    for (size_t i = nodes_.size(); i-- > 0;)
+    {
+        const GraphNodeView& n = nodes_[i];
+        const dui::Vec2 p = ToScreen({ static_cast<float>(n.x), static_cast<float>(n.y) });
+        const float w = NodeWidth(n.title) * zoom_;
+        const float h = NodeHeight() * zoom_;
+        if (local.x < p.x || local.x > p.x + w ||
+            local.y < p.y || local.y > p.y + h)
+            continue;
+        const float dx = std::min(local.x - p.x, p.x + w - local.x);
+        const float dy = std::min(local.y - p.y, p.y + h - local.y);
+        if (std::min(dx, dy) <= band)
+            return static_cast<int>(i);
+    }
+    return -1;
+}
+
+int GraphView::LinkTargetAt(const dui::Vec2& local) const
+{
+    const int over = HitNode(local);
+    if (over < 0 || nodes_[over].id == dragNodeId_) return -1;
+    for (const GraphLineView& line : lines_)
+    {
+        if ((line.a == dragNodeId_ && line.b == nodes_[over].id) ||
+            (line.b == dragNodeId_ && line.a == nodes_[over].id))
+            return -1;   // 关联无方向：已连过则不是候选
+    }
+    return over;
+}
+
+void GraphView::SetCursorIfChanged(dui::Cursor c)
+{
+    if (cursor_ == c) return;
+    cursor_ = c;
+    Set(dui::Prop::Cursor, c);
 }
 
 int GraphView::HitLine(const dui::Vec2& local) const
@@ -248,6 +299,22 @@ void GraphView::RequestCenter()
 void GraphView::SetSearch(const dui::String& text)
 {
     search_ = text;
+
+    // 输入搜索词后，把第一个命中节点平移到画布正中心（与 CenterView 同一套平移公式）。
+    if (!search_.empty())
+    {
+        for (const GraphNodeView& n : nodes_)
+        {
+            if (n.title.find(search_) == dui::String::npos) continue;
+            const dui::Rect b = Bounds();
+            const float cx = static_cast<float>(n.x + NodeWidth(n.title) * 0.5);
+            const float cy = static_cast<float>(n.y + NodeHeight() * 0.5);
+            pan_ = { b.w * 0.5f - cx * zoom_, b.h * 0.5f - cy * zoom_ };
+            RefreshLabels();
+            break;
+        }
+    }
+
     InvalidatePaint();
 }
 
@@ -387,8 +454,21 @@ void GraphView::OnPaint(dui::graphics::Painter& p, const dui::StyleContext&, flo
                      LineStroke(line.color, selected), 2.f, scale);
     }
 
-    for (const GraphNodeView& n : nodes_)
+    // 拉线预览：源节点中心 → 指针，蓝色虚线。与正式连线同层、画在节点之前，
+    // 于是伸进节点的一段会被节点的不透明背景盖住，看起来从节点边缘引出。
+    if (linking_ && dragIndex_ >= 0 && dragIndex_ < static_cast<int>(nodes_.size()))
     {
+        const GraphNodeView& src = nodes_[dragIndex_];
+        const dui::Vec2 center = ToScreen({ static_cast<float>(src.x + NodeWidth(src.title) * 0.5),
+                                            static_cast<float>(src.y + NodeHeight() * 0.5) });
+        StrokeDashedLine(p, { b.x + center.x, b.y + center.y },
+                         { b.x + linkPoint_.x, b.y + linkPoint_.y },
+                         0xFF1677FF, 2.f, scale);
+    }
+
+    for (size_t i = 0; i < nodes_.size(); ++i)
+    {
+        const GraphNodeView& n = nodes_[i];
         const dui::Vec2 pos = ToScreen({ static_cast<float>(n.x), static_cast<float>(n.y) });
         const dui::Rect box{ b.x + pos.x, b.y + pos.y,
                              NodeWidth(n.title) * zoom_, NodeHeight() * zoom_ };
@@ -398,8 +478,10 @@ void GraphView::OnPaint(dui::graphics::Painter& p, const dui::StyleContext&, flo
 
         const bool searchHit = !search_.empty() && n.title.find(search_) != dui::String::npos;
         const bool selected = selectedNode_ == n.id;
-        const dui::Color border = searchHit ? 0xFFF59E0B : NodeStroke(n.color, selected);
-        p.StrokeRoundRect(box, radius, 1.f, border, scale);
+        const bool linkTarget = linking_ && static_cast<int>(i) == linkHoverIndex_;
+        const dui::Color border = linkTarget ? 0xFF1677FF
+                                : searchHit ? 0xFFF59E0B : NodeStroke(n.color, selected);
+        p.StrokeRoundRect(box, radius, linkTarget ? 2.f : 1.f, border, scale);
     }
 
     // 选中节点右侧的加号（老项目 addBtn）：蓝圆 + 白十字，画在最后置于顶层。
@@ -458,6 +540,24 @@ bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
     const int ni = HitNode(local);
     if (ni >= 0)
     {
+        // 边缘 6px 热区 → 拉线建关联；矩形中间仍是拖动节点 / 双击编辑。
+        if (HitNodeEdge(local) >= 0)
+        {
+            selectedNode_ = nodes_[ni].id;
+            selectedLine_ = 0;
+            if (select_) select_(selectedNode_, 0);
+            linking_ = true;
+            dragIndex_ = ni;
+            dragNodeId_ = nodes_[ni].id;
+            linkHoverIndex_ = -1;
+            linkPoint_ = local;
+            SetCursorIfChanged(dui::Cursor::Crosshair);
+            SetCapture();
+            InvalidatePaint();
+            ev.handled = true;
+            return true;
+        }
+
         const uint64_t now = GetTickCount64();
         if (lastClickNode_ == nodes_[ni].id && now - lastClickMs_ < 350 && openNode_)
         {
@@ -480,6 +580,7 @@ bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
         const dui::Vec2 model = ToModel(local);
         dragOffset_ = { static_cast<float>(model.x - nodes_[ni].x),
                         static_cast<float>(model.y - nodes_[ni].y) };
+        SetCursorIfChanged(dui::Cursor::Move);
         SetCapture();
         InvalidatePaint();
         ev.handled = true;
@@ -501,6 +602,14 @@ bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
 bool GraphView::HandlePointerMove(dui::PointerEvent& ev)
 {
     const dui::Vec2 local = ToLocal(ev.pos);
+    if (linking_)
+    {
+        linkPoint_ = local;
+        linkHoverIndex_ = LinkTargetAt(local);
+        InvalidatePaint();
+        ev.handled = true;
+        return true;
+    }
     if (draggingNode_ && dragIndex_ >= 0 && dragIndex_ < static_cast<int>(nodes_.size()))
     {
         const dui::Vec2 model = ToModel(local);
@@ -521,14 +630,29 @@ bool GraphView::HandlePointerMove(dui::PointerEvent& ev)
         ev.handled = true;
         return true;
     }
+
+    // 悬停反馈：节点边缘 → 十字（可拉线），节点中间 → 移动（可拖动），空白 → 箭头。
+    if (HitNodeEdge(local) >= 0)
+        SetCursorIfChanged(dui::Cursor::Crosshair);
+    else if (HitNode(local) >= 0 || HitLine(local) >= 0)
+        SetCursorIfChanged(dui::Cursor::Move);
+    else
+        SetCursorIfChanged(dui::Cursor::Arrow);
     return false;
 }
 
 bool GraphView::HandlePointerUp(dui::PointerEvent& ev)
 {
-    if (!draggingNode_ && !panning_) return false;
+    if (!draggingNode_ && !panning_ && !linking_) return false;
 
-    if (draggingNode_ && dragIndex_ >= 0 && dragIndex_ < static_cast<int>(nodes_.size()))
+    if (linking_)
+    {
+        // 以松手位置重新判定：命中有效目标（非自身、未连过）→ 建无向关联；否则静默取消。
+        const int target = LinkTargetAt(ToLocal(ev.pos));
+        if (target >= 0 && linkNodes_)
+            linkNodes_(dragNodeId_, nodes_[target].id);
+    }
+    else if (draggingNode_ && dragIndex_ >= 0 && dragIndex_ < static_cast<int>(nodes_.size()))
     {
         const dui::Vec2 local = ToLocal(ev.pos);
         if (std::abs(local.x - pressLocal_.x) + std::abs(local.y - pressLocal_.y) > 4.f &&
@@ -541,7 +665,10 @@ bool GraphView::HandlePointerUp(dui::PointerEvent& ev)
     if (HasCapture()) ReleaseCapture();
     draggingNode_ = false;
     panning_ = false;
+    linking_ = false;
     dragIndex_ = -1;
+    linkHoverIndex_ = -1;
+    SetCursorIfChanged(dui::Cursor::Arrow);
     InvalidatePaint();   // 拖拽结束后让加号重新出现
     ev.handled = true;
     return true;

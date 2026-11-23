@@ -49,8 +49,9 @@ Detail::Detail()
 
     splitter_ = AddChild<Splitter>(dui::Style()
         .Width(kSplitterWidth).FlexShrink(0.f)
+        .Background(0xFFEEEEEE)
         .Cursor(dui::Cursor::SizeWE));
-    splitter_->When(dui::State::Hover, dui::Style().Background(0xFFBBBBBB));
+    splitter_->When(dui::State::Hover, dui::Style().Background(0xFFdddddd));
     splitter_->OnDragStart([this] { dragBase_ = width_; });
     splitter_->OnDrag([this](float dx) { width_ = dragBase_ - dx; if (onResize_) onResize_(); });
     splitter_->OnDragEnd([this] { if (onWidthCommitted_) onWidthCommitted_(); });
@@ -61,14 +62,15 @@ Detail::Detail()
         .Background(0xFFFFFFFF));
 
     auto* head = panel_->AddChild<dui::Panel>(dui::Style()
-        .Height(42.f).FlexShrink(0.f)
+        .Height(28.f).FlexShrink(0.f)
         .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
-        .Padding(dui::Thickness(0.f, 12.f)));
+        .Padding(dui::Thickness(12.f, 0.f, 8.f, 0.f))
+        .Background(0xFFF6F6F6));
     title_ = head->AddChild<dui::Text>(L"", dui::Style()
-        .FontSize(13.f).Color(0xFF111827).FlexGrow(1.f)
+        .FontSize(13.f).Color(0xFF1F2329).FlexGrow(1.f)
         .TextOverflow(dui::TextOverflow::Ellipsis));
     auto* saveBtn = head->AddChild<dui::Button>(L"保存", dui::Style()
-        .FontSize(13.f).Color(0xFF2563EB).Padding(dui::Thickness(4.f, 8.f))
+        .FontSize(13.f).Color(0xFF2563EB).Padding(dui::Thickness(2.f, 8.f))
         .Cursor(dui::Cursor::Hand));
     saveBtn->OnClick([this](dui::PointerEvent&) { Flush(); });
 
