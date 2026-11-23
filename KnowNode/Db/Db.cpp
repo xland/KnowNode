@@ -6,6 +6,8 @@
 #include "DbStmt.h"
 #include "../Env.h"
 
+namespace db {
+
 Db& Db::instance()
 {
     static Db db;
@@ -99,3 +101,5 @@ void Db::enableForeignKeys()
     if (stmt.step()) on = stmt.columnInt(0) != 0;
     if (!on) fatal(L"SQLite 未启用外键支持\n\n这一版 sqlite3 可能是在关闭外键的情况下编译的");
 }
+
+}  // namespace db

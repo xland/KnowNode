@@ -5,16 +5,16 @@
 
 #include "DUI/DUI.h"
 
-// 左侧知识分类列表：封装头部（新建）、列表渲染、选中态与右键菜单（重命名/删除）。
+// 左侧知识列表：封装头部（新建）、列表渲染、选中态与右键菜单（重命名/删除）。
 // 与外界的交互通过回调注入，避免依赖具体窗口。
-class Category final : public dui::Panel
+class KnowList final : public dui::Panel
 {
 public:
     using TextDialogFn = std::function<void(const dui::String&, const dui::String&,
                                             std::function<void(const dui::String&)>)>;
     using MenuPopupFn = std::function<void(const dui::Menu&, dui::Vec2)>;
 
-    Category();
+    KnowList();
 
     int64_t SelectedId() const { return selectedId_; }
     void SetSelected(int64_t id) { selectedId_ = id; Refresh(); }
@@ -35,7 +35,6 @@ private:
     void Select(int64_t id);
     void Rename(int64_t id);
     void Delete(int64_t id);
-    void EnsureDefaultList();
 
     dui::Panel* listBody_ = nullptr;
     std::vector<Row> rows_;

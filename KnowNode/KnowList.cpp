@@ -1,29 +1,18 @@
-#include "Category.h"
+#include "KnowList.h"
 
 #include "Db/KnowList.h"
+#include "IconFont.h"
 
 namespace
 {
     dui::String ListName(int64_t id)
     {
-        KnowListItem item;
-        return KnowList::instance().get(id, item) ? dui::Utf8ToWide(item.name.c_str()) : dui::String();
-    }
-
-    bool LoadSvgResource(dui::Svg* svg, const wchar_t* resourceName)
-    {
-        HRSRC res = FindResourceW(nullptr, resourceName, RT_RCDATA);
-        if (res == nullptr) return false;
-        HGLOBAL mem = LoadResource(nullptr, res);
-        if (mem == nullptr) return false;
-        const void* data = LockResource(mem);
-        const DWORD bytes = SizeofResource(nullptr, res);
-        if (data == nullptr || bytes == 0) return false;
-        return svg->LoadSvgMemory(data, static_cast<uint32_t>(bytes));
+        db::KnowListItem item;
+        return db::KnowList::instance().get(id, item) ? dui::Utf8ToWide(item.name.c_str()) : dui::String();
     }
 }
 
-Category::Category()
+KnowList::KnowList()
 {
     SetStyle(dui::Style()
         .FlexShrink(0.f)
@@ -45,15 +34,14 @@ Category::Category()
         .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
         .CornerRadius(4.f).Cursor(dui::Cursor::Hand));
     addList->When(dui::State::Hover, dui::Style().Background(0xFFD6E5F5));
-    auto* addIcon = addList->AddChild<dui::Svg>(dui::Style()
-        .Width(14.f).Height(14.f));
-    LoadSvgResource(addIcon, L"ICON_ADD_LIST");
+    IconFont::CreateIcon(addList, IconFont::Add, dui::Style()
+        .Width(16.f).Height(16.f).FontSize(14.f).Color(0xFF4B5563));
     addList->OnClick([this](dui::PointerEvent&)
     {
         textDialog_(L"知识名称", L"", [this](const dui::String& name)
         {
             if (name.empty()) return;
-            const int64_t id = KnowList::instance().add(dui::WideToUtf8(name));
+            const int64_t id = db::KnowList::instance().add(dui::WideToUtf8(name));
             if (id != 0) Select(id);
         });
     });
@@ -64,9 +52,9 @@ Category::Category()
         .Padding(dui::Thickness(0.f, 0.f, 0.f, 4.f)));
 }
 
-void Category::Refresh()
+void KnowList::Refresh()
 {
-    const auto items = KnowList::instance().all();
+    const auto items = db::KnowList::instance().all();
     while (rows_.size() < items.size())
     {
         Row row;
@@ -112,34 +100,28 @@ void Category::Refresh()
     }
 }
 
-void Category::Select(int64_t id)
+void KnowList::Select(int64_t id)
 {
     selectedId_ = id;
     Refresh();
     if (onSelect_) onSelect_(id);
 }
 
-void Category::Rename(int64_t id)
+void KnowList::Rename(int64_t id)
 {
     textDialog_(L"知识名称", ListName(id), [this, id](const dui::String& text)
     {
         if (text.empty() || text.size() > 36) return;
-        KnowList::instance().rename(id, dui::WideToUtf8(text));
+        db::KnowList::instance().rename(id, dui::WideToUtf8(text));
         Refresh();
         if (onRenamed_) onRenamed_(id, text);
     });
 }
 
-void Category::Delete(int64_t id)
+void KnowList::Delete(int64_t id)
 {
-    KnowList::instance().remove(id);
-    EnsureDefaultList();
-    const auto rest = KnowList::instance().all();
+    db::KnowList::instance().remove(id);
+    const auto rest = db::KnowList::instance().all();
+    // 删空时不补默认知识：让 KnWindow 进入空白页，由用户点“新建知识”重新创建。
     Select(rest.empty() ? 0 : rest.front().id);
-}
-
-void Category::EnsureDefaultList()
-{
-    if (KnowList::instance().all().empty())
-        KnowList::instance().add("默认知识");
 }

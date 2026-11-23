@@ -50,6 +50,7 @@
     <ClCompile>
       <AdditionalIncludeDirectories>$(ProjectDir)..\..\DUI\;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <DisableSpecificWarnings>4530;%(DisableSpecificWarnings)</DisableSpecificWarnings>
+      <ObjectFileName>$(IntDir)%(RelativeDir)%(Filename).obj</ObjectFileName>
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
@@ -73,7 +74,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Canvas.cpp" />
-    <ClCompile Include="Category.cpp" />
+    <ClCompile Include="KnowList.cpp" />
     <ClCompile Include="Detail.cpp" />
     <ClCompile Include="KnWindow.cpp" />
     <ClCompile Include="Splitter.cpp" />
@@ -87,6 +88,7 @@
     <ClCompile Include="Db\Setting.cpp" />
     <ClCompile Include="Env.cpp" />
     <ClCompile Include="GraphView.cpp" />
+    <ClCompile Include="IconFont.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RichDocStore.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
@@ -94,7 +96,7 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Canvas.h" />
-    <ClInclude Include="Category.h" />
+    <ClInclude Include="KnowList.h" />
     <ClInclude Include="Detail.h" />
     <ClInclude Include="KnWindow.h" />
     <ClInclude Include="Splitter.h" />
@@ -109,6 +111,7 @@
     <ClInclude Include="Db\Setting.h" />
     <ClInclude Include="Env.h" />
     <ClInclude Include="GraphView.h" />
+    <ClInclude Include="IconFont.h" />
     <ClInclude Include="RichDocStore.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="Util.h" />

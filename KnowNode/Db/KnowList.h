@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+namespace db {
+
 /**
  * know_list 表：一个个「知识」（历史知识、编程知识、文学知识……），
  * 每一项是一张网的入口。
@@ -42,3 +44,5 @@ public:
 private:
     KnowList();
 };
+
+}  // namespace db

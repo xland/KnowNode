@@ -1,27 +1,12 @@
 #include "TitleBar.h"
 
-#include <windows.h>
-
-namespace
-{
-    bool LoadSvgResource(dui::Svg* svg, const wchar_t* resourceName)
-    {
-        HRSRC res = FindResourceW(nullptr, resourceName, RT_RCDATA);
-        if (res == nullptr) return false;
-        HGLOBAL mem = LoadResource(nullptr, res);
-        if (mem == nullptr) return false;
-        const void* data = LockResource(mem);
-        const DWORD bytes = SizeofResource(nullptr, res);
-        if (data == nullptr || bytes == 0) return false;
-        return svg->LoadSvgMemory(data, static_cast<uint32_t>(bytes));
-    }
-}
+#include "IconFont.h"
 
 TitleBar::TitleBar()
 {
     SetStyle(dui::Style()
         .Height(32.f).FlexShrink(0.f)
-        .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
+        .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Start)
         .Background(0xFFFAFAFD)
         .BorderWidth(dui::Thickness(0.f, 0.f, 0.f, 1.f))
         .BorderColor(0xFFD3E3FD)
@@ -32,18 +17,19 @@ TitleBar::TitleBar()
         .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
         .Gap(8.f).Padding(dui::Thickness(12.f, 0.f, 0.f, 0.f))
         .AppRegion(dui::AppRegion::Drag));
-    auto* titleLogo = titleLabel->AddChild<dui::Svg>(dui::Style()
-        .Width(16.f).Height(16.f).FlexShrink(0.f)
-        .AppRegion(dui::AppRegion::Drag));
-    LoadSvgResource(titleLogo, L"LOGO_SVG");
+    IconFont::CreateIcon(titleLabel, IconFont::Nodes, dui::Style()
+        .Width(18.f).Height(18.f).FontSize(17.f).FlexShrink(0.f)
+        .Color(0xFF1677FF).AppRegion(dui::AppRegion::Drag));
     titleLabel->AddChild<dui::Text>(L"KnowNode 知点", dui::Style()
         .FontSize(14.f).Color(0xFF606060)
         .TextOverflow(dui::TextOverflow::Ellipsis)
         .AppRegion(dui::AppRegion::Drag));
 
+    // 高度 31 = 标题栏 32 − 底部边框 1：按钮贴顶排布，底边正好停在边框上缘，
+    // hover 背景不会盖住标题栏底部那条 1px 边框。
     auto titleButtonStyle = [] {
         return dui::Style()
-            .Width(36.f).Height(32.f).FlexShrink(0.f)
+            .Width(36.f).Height(31.f).FlexShrink(0.f)
             .FlexDirection(dui::FlexDirection::Row)
             .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
             .AppRegion(dui::AppRegion::NoDrag);

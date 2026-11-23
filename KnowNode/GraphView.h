@@ -20,6 +20,7 @@ struct GraphLineView
     int64_t a = 0;
     int64_t b = 0;
     int color = 0;
+    dui::String title;
 };
 
 class GraphView final : public dui::Panel
@@ -54,13 +55,17 @@ public:
 
     using CommitTitleFn = std::function<void(int64_t nodeId, const dui::String& text)>;
     void OnCommitTitle(CommitTitleFn fn) { commitTitle_ = std::move(fn); }
+    using CommitLineTitleFn = std::function<void(int64_t lineId, const dui::String& text)>;
+    void OnCommitLineTitle(CommitLineTitleFn fn) { commitLineTitle_ = std::move(fn); }
 
-    // 就地编辑：在节点框上覆盖输入框，全选等待输入；编辑中的节点 id（0 = 未编辑）。
+    // 就地编辑：在节点框或连线中点上覆盖输入框，全选等待输入；非 0 表示正在编辑。
     int64_t EditingNodeId() const noexcept { return editingNodeId_; }
     void BeginTitleEdit(int64_t nodeId);
-    void CommitTitleEdit(bool commit);   // commit=true 写库（空则回落"未命名"），false 放弃
+    void BeginLineTitleEdit(int64_t lineId);
+    void CommitTitleEdit(bool commit);   // commit=true 写库（节点空则回落"未命名"），false 放弃
     bool HandleTabKey();                 // Tab：提交当前编辑并以该节点为源新建关联节点
     void UpdateNodeTitle(int64_t nodeId, const dui::String& text);   // 仅更新标题，不重置视图
+    void UpdateLineTitle(int64_t lineId, const dui::String& text);   // 仅更新连线标题，不重置视图
 
 protected:
     dui::Vec2 MeasureContent(const dui::StyleContext& ctx, const dui::Vec2& avail) const override;
@@ -90,13 +95,17 @@ private:
     void SetCursorIfChanged(dui::Cursor c);
     void RefreshLabels();
     void CenterView();     // 节点包围盒中心置于视口正中（按钮与加载后共用）
+    // 连线中点（local 坐标）；两端节点缺失时返回 false。
+    bool LineMidLocal(const GraphLineView& line, dui::Vec2& out) const;
 
     std::vector<GraphNodeView> nodes_;
     std::vector<GraphLineView> lines_;
     std::vector<dui::Text*> labels_;
+    std::vector<dui::Text*> lineLabels_;   // 连线中点标题（空标题的连线不放标签）
 
     dui::TextBox* editor_ = nullptr;
     int64_t editingNodeId_ = 0;
+    int64_t editingLineId_ = 0;
 
     dui::String search_;
     int64_t selectedNode_ = 0;
@@ -121,6 +130,7 @@ private:
 
     uint64_t lastClickMs_ = 0;
     int64_t lastClickNode_ = 0;
+    int64_t lastClickLine_ = 0;
 
     ContextMenuFn contextMenu_;
     OpenNodeFn openNode_;
@@ -129,4 +139,5 @@ private:
     AddNodeFn addNode_;
     LinkNodesFn linkNodes_;
     CommitTitleFn commitTitle_;
+    CommitLineTitleFn commitLineTitle_;
 };

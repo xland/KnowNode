@@ -3,6 +3,8 @@
 #include "DbStmt.h"
 #include "../Util.h"
 
+namespace db {
+
 static const DbTableRegistrar<Setting> registrar;
 
 Setting::Setting()
@@ -63,3 +65,5 @@ void Setting::set(const std::string& key, const std::string& value)
     insert.bindInt(4, now);
     insert.run();
 }
+
+}  // namespace db

@@ -11,7 +11,7 @@ std::filesystem::path Env::dataPath;
 void Env::init()
 {
     initDataPath();
-    Db::instance().init();
+    db::Db::instance().init();
 }
 
 std::filesystem::path Env::getDataPath()

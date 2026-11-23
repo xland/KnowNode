@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+namespace db {
+
 /**
  * 应用数据库（单例）：持有到 db.db 的持久连接，负责启动时建库建表。
  *
@@ -66,3 +68,5 @@ struct DbTableRegistrar
 {
     DbTableRegistrar() { T::instance(); }
 };
+
+}  // namespace db

@@ -2,25 +2,12 @@
 
 #include <algorithm>
 
-#include "DUI/UI/Svg.h"
-
 #include "Db/KnowLine.h"
 #include "Db/KnowNode.h"
+#include "IconFont.h"
 
 namespace
 {
-    bool LoadSvgResource(dui::Svg* svg, const wchar_t* resourceName)
-    {
-        HRSRC res = FindResourceW(nullptr, resourceName, RT_RCDATA);
-        if (res == nullptr) return false;
-        HGLOBAL mem = LoadResource(nullptr, res);
-        if (mem == nullptr) return false;
-        const void* data = LockResource(mem);
-        const DWORD bytes = SizeofResource(nullptr, res);
-        if (data == nullptr || bytes == 0) return false;
-        return svg->LoadSvgMemory(data, static_cast<uint32_t>(bytes));
-    }
-
     const wchar_t* ColorName(int color)
     {
         switch (color)
@@ -55,7 +42,7 @@ Canvas::Canvas()
     graph_->OnOpenNode([this](int64_t nodeId) { graph_->BeginTitleEdit(nodeId); });
     graph_->OnNodeMoved([this](int64_t id, double x, double y)
     {
-        KnowNode::instance().move(id, x, y);
+        db::KnowNode::instance().move(id, x, y);
     });
     graph_->OnSelect([this](int64_t nodeId, int64_t lineId)
     {
@@ -64,16 +51,25 @@ Canvas::Canvas()
     graph_->OnAddNode([this](int64_t nodeId) { CreateRelatedNode(nodeId); });
     graph_->OnLinkNodes([this](int64_t a, int64_t b)
     {
-        if (KnowLine::instance().add(a, b) != 0) Refresh();
+        if (db::KnowLine::instance().add(a, b) != 0) Refresh();
     });
     graph_->OnCommitTitle([this](int64_t nodeId, const dui::String& text)
     {
-        KnowNodeItem item;
-        if (!KnowNode::instance().get(nodeId, item)) return;
+        db::KnowNodeItem item;
+        if (!db::KnowNode::instance().get(nodeId, item)) return;
         const int64_t oldDetail = item.detailId;
-        KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
+        db::KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
         graph_->UpdateNodeTitle(nodeId, text);
         if (onDetailTitle_) onDetailTitle_(oldDetail, text);
+    });
+    graph_->OnCommitLineTitle([this](int64_t lineId, const dui::String& text)
+    {
+        db::KnowLineItem item;
+        if (!db::KnowLine::instance().get(lineId, item)) return;
+        const int64_t oldDetail = item.detailId;
+        db::KnowLine::instance().updateTitle(lineId, dui::WideToUtf8(text));
+        graph_->UpdateLineTitle(lineId, text);
+        if (onLineDetailTitle_) onLineDetailTitle_(oldDetail, text);
     });
 
     // 悬浮卡片样式（老项目 .knowNetSearch / .knowNetCenter）：白底、1px #e5e6eb、
@@ -103,8 +99,8 @@ Canvas::Canvas()
         .Position(dui::Position::Absolute).Right(10.f).Top(8.f).ZIndex(4)
         .Width(26.f).JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
         .Cursor(dui::Cursor::Hand));
-    auto* centerIcon = center->AddChild<dui::Svg>(dui::Style().Width(14.f).Height(14.f));
-    LoadSvgResource(centerIcon, L"ICON_CENTER");
+    IconFont::CreateIcon(center, IconFont::Center, dui::Style()
+        .Width(18.f).Height(18.f).FontSize(16.f).Color(0xFF6B7280));
     center->OnClick([this](dui::PointerEvent&) { graph_->ResetView(); });
 }
 
@@ -118,7 +114,7 @@ void Canvas::SetList(int64_t listId)
 void Canvas::Refresh()
 {
     std::vector<GraphNodeView> nodes;
-    for (const auto& n : KnowNode::instance().ofList(listId_))
+    for (const auto& n : db::KnowNode::instance().ofList(listId_))
     {
         GraphNodeView v;
         v.id = n.id;
@@ -130,13 +126,14 @@ void Canvas::Refresh()
     }
 
     std::vector<GraphLineView> lines;
-    for (const auto& l : KnowLine::instance().ofList(listId_))
+    for (const auto& l : db::KnowLine::instance().ofList(listId_))
     {
         GraphLineView v;
         v.id = l.id;
         v.a = l.nodeAId;
         v.b = l.nodeBId;
         v.color = l.color;
+        v.title = dui::Utf8ToWide(l.title.c_str());
         lines.push_back(std::move(v));
     }
 
@@ -162,10 +159,12 @@ void Canvas::ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double
     }
     else if (lineId != 0)
     {
+        menu.Add(L"重命名", [this, lineId] { RenameLine(lineId); });
         dui::Menu colors;
         for (int i = 0; i <= 6; ++i)
             colors.Add(ColorName(i), [this, nodeId, lineId, i] { SetGraphColor(nodeId, lineId, i); });
         menu.AddSubMenu(L"标记颜色", colors);
+        menu.Separator();
         menu.Add(L"删除连线", [this, lineId] { DeleteLine(lineId); });
     }
     else
@@ -177,28 +176,42 @@ void Canvas::ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double
 
 void Canvas::RenameNode(int64_t nodeId)
 {
-    KnowNodeItem item;
-    if (!KnowNode::instance().get(nodeId, item)) return;
+    db::KnowNodeItem item;
+    if (!db::KnowNode::instance().get(nodeId, item)) return;
     const int64_t oldDetail = item.detailId;
     textDialog_(L"节点标题", dui::Utf8ToWide(item.title.c_str()), [this, nodeId, oldDetail](const dui::String& text)
     {
         if (text.empty() || text.size() > 36) return;
-        KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
+        db::KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
         Refresh();
         if (onDetailTitle_) onDetailTitle_(oldDetail, text);
     });
 }
 
+void Canvas::RenameLine(int64_t lineId)
+{
+    db::KnowLineItem item;
+    if (!db::KnowLine::instance().get(lineId, item)) return;
+    const int64_t oldDetail = item.detailId;
+    textDialog_(L"连线标题", dui::Utf8ToWide(item.title.c_str()), [this, lineId, oldDetail](const dui::String& text)
+    {
+        if (text.empty() || text.size() > 36) return;
+        db::KnowLine::instance().updateTitle(lineId, dui::WideToUtf8(text));
+        Refresh();
+        if (onLineDetailTitle_) onLineDetailTitle_(oldDetail, text);
+    });
+}
+
 void Canvas::SetGraphColor(int64_t nodeId, int64_t lineId, int color)
 {
-    if (nodeId != 0) KnowNode::instance().setColor(nodeId, color);
-    if (lineId != 0) KnowLine::instance().setColor(lineId, color);
+    if (nodeId != 0) db::KnowNode::instance().setColor(nodeId, color);
+    if (lineId != 0) db::KnowLine::instance().setColor(lineId, color);
     Refresh();
 }
 
 void Canvas::CreateNode(double x, double y)
 {
-    const int64_t id = KnowNode::instance().add(listId_, x, y);
+    const int64_t id = db::KnowNode::instance().add(listId_, x, y);
     if (id == 0) return;
     Refresh();
     graph_->BeginTitleEdit(id);
@@ -206,16 +219,16 @@ void Canvas::CreateNode(double x, double y)
 
 void Canvas::CreateRelatedNode(int64_t nodeId)
 {
-    KnowNodeItem item;
-    if (!KnowNode::instance().get(nodeId, item)) return;
+    db::KnowNodeItem item;
+    if (!db::KnowNode::instance().get(nodeId, item)) return;
     // 老项目：新节点在源节点右侧、y 对齐；源宽按标题字符数近似（同 GraphView::NodeWidth）。
     const dui::String title = dui::Utf8ToWide(item.title.c_str());
     const float srcWidth = std::max(72.f, std::min(220.f,
         static_cast<float>(title.size()) * 13.f + 24.f));
     const double x = item.x + srcWidth + 60.0;
-    const int64_t id = KnowNode::instance().add(listId_, x, item.y);
+    const int64_t id = db::KnowNode::instance().add(listId_, x, item.y);
     if (id == 0) return;
-    KnowLine::instance().add(nodeId, id);
+    db::KnowLine::instance().add(nodeId, id);
     Refresh();
     graph_->BeginTitleEdit(id);
 }
@@ -227,12 +240,12 @@ bool Canvas::HandleTabKey()
 
 void Canvas::DeleteNode(int64_t nodeId)
 {
-    KnowNode::instance().remove(nodeId);
+    db::KnowNode::instance().remove(nodeId);
     if (onDeleted_) onDeleted_();
 }
 
 void Canvas::DeleteLine(int64_t lineId)
 {
-    KnowLine::instance().remove(lineId);
+    db::KnowLine::instance().remove(lineId);
     if (onDeleted_) onDeleted_();
 }

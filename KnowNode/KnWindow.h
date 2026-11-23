@@ -4,8 +4,8 @@
 #include <vector>
 
 #include "Canvas.h"
-#include "Category.h"
 #include "DUI/DUI.h"
+#include "KnowList.h"
 #include "Detail.h"
 #include "Splitter.h"
 #include "StatusBar.h"
@@ -41,9 +41,10 @@ private:
                         std::function<void(const dui::String&)> callback);
     void HideTextDialog();
 
-    Category* category_ = nullptr;
+    KnowList* category_ = nullptr;
     Canvas* canvas_ = nullptr;
     Detail* detail_ = nullptr;
+    dui::Panel* blank_ = nullptr;   // 未选中知识时的空白页（含“新建知识”按钮）
     StatusBar* statusBar_ = nullptr;
     TitleBar* titleBar_ = nullptr;
     Splitter* listSplitter_ = nullptr;
@@ -57,4 +58,5 @@ private:
     std::function<void(const dui::String&)> dialogCallback_;
 
     int64_t currentListId_ = 0;
+    int64_t selectedNodeDetailId_ = 0;   // 当前选中节点的详情 id（0 = 未选中节点）
 };

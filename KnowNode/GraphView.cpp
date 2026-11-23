@@ -223,6 +223,25 @@ void GraphView::SetCursorIfChanged(dui::Cursor c)
     Set(dui::Prop::Cursor, c);
 }
 
+bool GraphView::LineMidLocal(const GraphLineView& line, dui::Vec2& out) const
+{
+    const GraphNodeView* a = nullptr;
+    const GraphNodeView* b = nullptr;
+    for (const GraphNodeView& n : nodes_)
+    {
+        if (n.id == line.a) a = &n;
+        if (n.id == line.b) b = &n;
+    }
+    if (a == nullptr || b == nullptr) return false;
+
+    const dui::Vec2 pa = ToScreen({ static_cast<float>(a->x + NodeWidth(a->title) * 0.5),
+                                   static_cast<float>(a->y + NodeHeight() * 0.5) });
+    const dui::Vec2 pb = ToScreen({ static_cast<float>(b->x + NodeWidth(b->title) * 0.5),
+                                   static_cast<float>(b->y + NodeHeight() * 0.5) });
+    out = { (pa.x + pb.x) * 0.5f, (pa.y + pb.y) * 0.5f };
+    return true;
+}
+
 int GraphView::HitLine(const dui::Vec2& local) const
 {
     for (size_t i = lines_.size(); i-- > 0;)
@@ -278,6 +297,38 @@ void GraphView::RefreshLabels()
             .TextAlign(dui::TextAlign::Center)
             .TextOverflow(dui::TextOverflow::Ellipsis)
             .Visible(n.id != editingNodeId_));
+    }
+
+    while (lineLabels_.size() < lines_.size())
+        lineLabels_.push_back(AddChild<dui::Text>());
+
+    for (size_t i = 0; i < lineLabels_.size(); ++i)
+    {
+        dui::Text* label = lineLabels_[i];
+        const bool show = i < lines_.size() && !lines_[i].title.empty()
+            && lines_[i].id != editingLineId_;
+        dui::Vec2 mid{ 0.f, 0.f };
+        if (!show || !LineMidLocal(lines_[i], mid))
+        {
+            label->SetText(L"");
+            label->SetStyle(dui::Style().Position(dui::Position::Absolute)
+                .Left(-100000.f).Top(-100000.f).Visible(false));
+            continue;
+        }
+
+        const float font = std::max(10.f, std::min(20.f, 12.f * zoom_));
+        const float labelW = std::max(28.f, static_cast<float>(lines_[i].title.size()) * font * 1.05f + 12.f);
+        const float labelH = font * 1.6f;
+        label->SetText(lines_[i].title);
+        label->SetStyle(dui::Style()
+            .Position(dui::Position::Absolute)
+            .Left(mid.x - labelW * 0.5f).Top(mid.y - labelH * 0.5f)
+            .Width(labelW).Height(labelH)
+            .Background(0xFFFFFFFF).BorderWidth(1.f).BorderColor(0xFFE5E6EB).CornerRadius(3.f)
+            .Padding(dui::Thickness(3.f, 0.f, 3.f, 0.f))
+            .FontSize(font).Color(0xFF6B7280)
+            .TextAlign(dui::TextAlign::Center)
+            .Visible(true));
     }
 }
 
@@ -353,6 +404,7 @@ void GraphView::ResetView()
 
 void GraphView::BeginTitleEdit(int64_t nodeId)
 {
+    editingLineId_ = 0;   // 两种就地编辑共用一个输入框，切换时先清掉另一方
     for (const GraphNodeView& n : nodes_)
     {
         if (n.id != nodeId) continue;
@@ -378,21 +430,57 @@ void GraphView::BeginTitleEdit(int64_t nodeId)
     }
 }
 
+void GraphView::BeginLineTitleEdit(int64_t lineId)
+{
+    editingNodeId_ = 0;   // 两种就地编辑共用一个输入框，切换时先清掉另一方
+    for (const GraphLineView& line : lines_)
+    {
+        if (line.id != lineId) continue;
+        dui::Vec2 mid;
+        if (!LineMidLocal(line, mid)) return;
+        const float font = std::max(10.f, std::min(20.f, 12.f * zoom_));
+        const float labelW = std::max(60.f, static_cast<float>(line.title.size()) * font * 1.05f + 16.f);
+        const float labelH = font * 1.6f;
+        editor_->SetStyle(dui::Style()
+            .Position(dui::Position::Absolute)
+            .Left(mid.x - labelW * 0.5f).Top(mid.y - labelH * 0.5f)
+            .Width(labelW).Height(std::max(24.f, labelH))
+            .Background(0xFFFFFFFF).BorderWidth(1.f).BorderColor(0xFF1677FF)
+            .CornerRadius(3.f).TextAlign(dui::TextAlign::Center)
+            .FontSize(font).Color(0xFF1F2329)
+            .Visible(true).ZIndex(6));
+        editor_->SetText(line.title);
+        editor_->SelectAll();
+        editor_->Focus();
+        editingLineId_ = lineId;
+        RefreshLabels();   // 隐藏正在编辑的连线标签，避免文字重叠
+        InvalidatePaint();
+        return;
+    }
+}
+
 void GraphView::CommitTitleEdit(bool commit)
 {
-    if (editingNodeId_ == 0) return;
-    const int64_t id = editingNodeId_;
+    if (editingNodeId_ == 0 && editingLineId_ == 0) return;
+    const int64_t nodeId = editingNodeId_;
+    const int64_t lineId = editingLineId_;
     dui::String text = editor_->GetText();
     editingNodeId_ = 0;
+    editingLineId_ = 0;
     editor_->SetStyle(dui::Style()
         .Position(dui::Position::Absolute)
         .Left(-100000.f).Top(-100000.f).Visible(false).ZIndex(6));
     editor_->Blur();
-    if (commit && commitTitle_)
+    if (commit)
     {
-        // 老项目：空串回落「未命名」。
-        if (text.empty()) text = L"未命名";
-        commitTitle_(id, text);
+        if (nodeId != 0 && commitTitle_)
+        {
+            // 老项目：节点空串回落「未命名」。
+            if (text.empty()) text = L"未命名";
+            commitTitle_(nodeId, text);
+        }
+        else if (lineId != 0 && commitLineTitle_)
+            commitLineTitle_(lineId, text);   // 连线允许空串 = 不显示标题
     }
     RefreshLabels();
     InvalidatePaint();
@@ -412,9 +500,23 @@ void GraphView::UpdateNodeTitle(int64_t nodeId, const dui::String& text)
     InvalidatePaint();
 }
 
+void GraphView::UpdateLineTitle(int64_t lineId, const dui::String& text)
+{
+    for (GraphLineView& l : lines_)
+    {
+        if (l.id == lineId)
+        {
+            l.title = text;
+            break;
+        }
+    }
+    RefreshLabels();
+    InvalidatePaint();
+}
+
 bool GraphView::HandleTabKey()
 {
-    if (editingNodeId_ != 0) return false;   // 编辑中的 Tab 由 editor 自己处理
+    if (editingNodeId_ != 0 || editingLineId_ != 0) return false;   // 编辑中的 Tab 由 editor 自己处理
     if (selectedNode_ != 0 && addNode_)
     {
         addNode_(selectedNode_);
@@ -591,6 +693,25 @@ bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
     selectedNode_ = 0;
     selectedLine_ = li >= 0 ? lines_[li].id : 0;
     if (select_) select_(selectedNode_, selectedLine_);
+
+    // 双击连线 → 就地编辑标题（与节点双击同构，节点双击走 openNode_ 回调）。
+    if (li >= 0)
+    {
+        const uint64_t now = GetTickCount64();
+        if (lastClickLine_ == lines_[li].id && now - lastClickMs_ < 350)
+        {
+            BeginLineTitleEdit(lines_[li].id);
+            lastClickMs_ = 0;
+            lastClickLine_ = 0;
+            ev.handled = true;
+            return true;
+        }
+        lastClickMs_ = now;
+        lastClickLine_ = lines_[li].id;
+    }
+    else
+        lastClickLine_ = 0;
+
     panning_ = true;
     lastLocal_ = local;
     SetCapture();

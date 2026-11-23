@@ -21,6 +21,7 @@ public:
 
     void OnSelectItem(std::function<void(int64_t, int64_t)> fn) { onSelectItem_ = std::move(fn); }
     void OnDetailTitle(std::function<void(int64_t, const dui::String&)> fn) { onDetailTitle_ = std::move(fn); }
+    void OnLineDetailTitle(std::function<void(int64_t, const dui::String&)> fn) { onLineDetailTitle_ = std::move(fn); }
     void OnDeleted(std::function<void()> fn) { onDeleted_ = std::move(fn); }
     void OnNodeCount(std::function<void(size_t)> fn) { onNodeCount_ = std::move(fn); }
     void SetTextDialog(TextDialogFn fn) { textDialog_ = std::move(fn); }
@@ -30,6 +31,7 @@ public:
 private:
     void ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double modelX, double modelY);
     void RenameNode(int64_t nodeId);
+    void RenameLine(int64_t lineId);
     void SetGraphColor(int64_t nodeId, int64_t lineId, int color);
     void CreateNode(double x, double y);
     void CreateRelatedNode(int64_t nodeId);
@@ -41,6 +43,7 @@ private:
 
     std::function<void(int64_t, int64_t)> onSelectItem_;
     std::function<void(int64_t, const dui::String&)> onDetailTitle_;
+    std::function<void(int64_t, const dui::String&)> onLineDetailTitle_;
     std::function<void()> onDeleted_;
     std::function<void(size_t)> onNodeCount_;
     TextDialogFn textDialog_;

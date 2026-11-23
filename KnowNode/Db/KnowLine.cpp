@@ -5,6 +5,8 @@
 #include "KnowNode.h"
 #include "../Util.h"
 
+namespace db {
+
 static const DbTableRegistrar<KnowLine> registrar;
 
 KnowLine::KnowLine()
@@ -31,6 +33,7 @@ void KnowLine::create(sqlite3* conn)
         "    created_at INTEGER NOT NULL,"
         "    updated_at INTEGER NOT NULL,"
         "    color      INTEGER NOT NULL DEFAULT 0,"
+        "    title      TEXT    NOT NULL DEFAULT '',"
         "    CHECK (node_a_id < node_b_id),"
         "    UNIQUE (node_a_id, node_b_id)"
         ");";
@@ -114,11 +117,23 @@ bool KnowLine::setColor(int64_t id, int color)
     return sqlite3_changes(Db::instance().conn()) > 0;
 }
 
+bool KnowLine::updateTitle(int64_t id, const std::string& title)
+{
+    DbStmt stmt{ Db::instance().conn(),
+        "UPDATE know_line SET title = ?, updated_at = ? WHERE id = ?;" };
+    if (!stmt.ok()) return false;
+    stmt.bindText(1, title);
+    stmt.bindInt(2, Util::nowMillis());
+    stmt.bindInt(3, id);
+    stmt.run();
+    return sqlite3_changes(Db::instance().conn()) > 0;
+}
+
 std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
 {
     std::vector<KnowLineItem> items;
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT l.id, l.node_a_id, l.node_b_id, l.detail_id, l.created_at, l.updated_at, l.color"
+        "SELECT l.id, l.node_a_id, l.node_b_id, l.detail_id, l.created_at, l.updated_at, l.color, l.title"
         "  FROM know_line l"
         "  JOIN know_node n ON n.id = l.node_a_id"
         " WHERE n.list_id = ?"
@@ -135,6 +150,7 @@ std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
         item.createdAt = stmt.columnInt(4);
         item.updatedAt = stmt.columnInt(5);
         item.color = static_cast<int>(stmt.columnInt(6));
+        item.title = stmt.columnText(7);
         items.push_back(std::move(item));
     }
     return items;
@@ -143,7 +159,7 @@ std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
 bool KnowLine::get(int64_t id, KnowLineItem& out) const
 {
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, node_a_id, node_b_id, detail_id, created_at, updated_at"
+        "SELECT id, node_a_id, node_b_id, detail_id, created_at, updated_at, color, title"
         "  FROM know_line WHERE id = ?;" };
     if (!stmt.ok()) return false;
     stmt.bindInt(1, id);
@@ -155,5 +171,8 @@ bool KnowLine::get(int64_t id, KnowLineItem& out) const
     out.createdAt = stmt.columnInt(4);
     out.updatedAt = stmt.columnInt(5);
     out.color = static_cast<int>(stmt.columnInt(6));
+    out.title = stmt.columnText(7);
     return true;
 }
+
+}  // namespace db

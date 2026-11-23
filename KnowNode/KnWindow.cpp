@@ -18,17 +18,12 @@ namespace
 
     float LoadWidth(const char* key, float fallback, float minWidth)
     {
-        const std::string v = Setting::instance().get(key);
+        const std::string v = db::Setting::instance().get(key);
         if (v.empty()) return fallback;
         const float w = std::strtof(v.c_str(), nullptr);
         return w >= minWidth ? w : fallback;
     }
 
-    dui::String ListName(int64_t id)
-    {
-        KnowListItem item;
-        return KnowList::instance().get(id, item) ? dui::Utf8ToWide(item.name.c_str()) : dui::String();
-    }
 }
 
 void KnWindow::OnCreate()
@@ -37,8 +32,8 @@ void KnWindow::OnCreate()
     BuildUi();
     detail_->SetWidth(LoadWidth("know_detail.width", 600.f, kDetailMin));
 
-    const auto lists = KnowList::instance().all();
-    if (!lists.empty()) OpenList(lists.front().id);
+    const auto lists = db::KnowList::instance().all();
+    OpenList(lists.empty() ? 0 : lists.front().id);   // 无知识 → 空白页；有知识 → 选第一个
     category_->Refresh();
     ApplyPanelWidths();
 }
@@ -58,13 +53,15 @@ void KnWindow::ApplyPanelWidths()
 {
     // avail = 列表 + 画布 + 详情（splitter 与手柄已从窗口宽度中扣除）。
     const float bodyWidth = ClientSizeDip().x;
-    const bool expanded = detail_->IsExpanded();
-    const float fixed = kSplitterWidth + kHandleWidth
+    const bool hasKnowledge = currentListId_ != 0;
+    const bool expanded = hasKnowledge && detail_->IsExpanded();
+    // 空白页时详情整体不显示，它的手柄/分隔条也不占位。
+    const float fixed = kSplitterWidth + (hasKnowledge ? kHandleWidth : 0.f)
         + (expanded ? kSplitterWidth : 0.f);
     const float avail = bodyWidth - fixed;
     const float detailNow = expanded ? detail_->Width() : 0.f;
 
-    // 优先保列表与详情最小值；画布不足时按老项目规则牺牲画布。
+    // 优先保列表与详情最小值；画布/空白页不足时按老项目规则牺牲它。
     listWidth_ = std::clamp(listWidth_, kListMin,
         std::max(kListMin, avail - kCanvasMin - detailNow));
     if (expanded)
@@ -79,8 +76,8 @@ void KnWindow::ApplyPanelWidths()
 
 void KnWindow::SavePanelWidths()
 {
-    Setting::instance().set("know_list.width", std::to_string(static_cast<int>(listWidth_ + 0.5f)));
-    Setting::instance().set("know_detail.width", std::to_string(static_cast<int>(detail_->Width() + 0.5f)));
+    db::Setting::instance().set("know_list.width", std::to_string(static_cast<int>(listWidth_ + 0.5f)));
+    db::Setting::instance().set("know_detail.width", std::to_string(static_cast<int>(detail_->Width() + 0.5f)));
 }
 
 void KnWindow::ShowMenuAtClient(const dui::Menu& menu, dui::Vec2 clientPosDip)
@@ -106,11 +103,10 @@ void KnWindow::BuildUi()
     auto* body = Root()->AddChild<dui::Panel>(dui::Style()
         .FlexGrow(1.f).FlexDirection(dui::FlexDirection::Row));
 
-    category_ = body->AddChild<Category>(dui::Style().Width(listWidth_));
+    category_ = body->AddChild<KnowList>(dui::Style().Width(listWidth_));
     category_->OnSelect([this](int64_t id) { OpenList(id); });
     category_->OnRenamed([this](int64_t id, const dui::String& name)
     {
-        statusBar_->SetListName(name);
         if (detail_->CurrentKind() == Detail::Kind::List && currentListId_ == id)
             detail_->SetTitle(name);
     });
@@ -154,6 +150,12 @@ void KnWindow::BuildUi()
     canvas_->OnDetailTitle([this](int64_t detailId, const dui::String& text)
     {
         detail_->UpdateTitleIf(Detail::Kind::Node, detailId, text);
+        if (selectedNodeDetailId_ != 0 && detailId == selectedNodeDetailId_)
+            statusBar_->SetSelectedNode(text);   // 选中的节点改名 → 左下角同步
+    });
+    canvas_->OnLineDetailTitle([this](int64_t detailId, const dui::String& text)
+    {
+        detail_->UpdateTitleIf(Detail::Kind::Line, detailId, text);
     });
     canvas_->OnDeleted([this]
     {
@@ -191,6 +193,27 @@ void KnWindow::BuildUi()
         if (!result.IsOk() || result.Value().empty()) return false;
         path = result.Value().front();
         return true;
+    });
+
+    // 未选中任何知识时的空白页：占满画布+详情区域，居中一个“新建知识”按钮。
+    // 与画布/详情互斥切换 Display——不能只设 Visible，否则会继续占位把面板挤出屏幕。
+    blank_ = body->AddChild<dui::Panel>(dui::Style()
+        .FlexGrow(1.f).FlexDirection(dui::FlexDirection::Column)
+        .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
+        .Background(0xFFF7F8FA));
+    auto* newKnowledgeBtn = blank_->AddChild<dui::Button>(L"新建知识", dui::Style()
+        .Padding(dui::Thickness(12.f, 26.f))
+        .FontSize(15.f).Color(0xFFFFFFFF).Background(0xFF1677FF)
+        .CornerRadius(6.f).Cursor(dui::Cursor::Hand));
+    newKnowledgeBtn->When(dui::State::Hover, dui::Style().Background(0xFF4096FF));
+    newKnowledgeBtn->OnClick([this](dui::PointerEvent&)
+    {
+        ShowTextDialog(L"知识名称", L"", [this](const dui::String& name)
+        {
+            if (name.empty()) return;
+            const int64_t id = db::KnowList::instance().add(dui::WideToUtf8(name));
+            if (id != 0) OpenList(id);
+        });
     });
 
     statusBar_ = Root()->AddChild<StatusBar>();
@@ -249,38 +272,74 @@ void KnWindow::BuildDialogOverlay(dui::Panel* root)
 
 void KnWindow::OpenList(int64_t listId)
 {
-    if (listId == 0) return;
+    const bool hasKnowledge = listId != 0;
     currentListId_ = listId;
+
+    // 画布/详情与空白页互斥：用 Display 而非 Visible，空态下不占任何布局空间。
+    canvas_->Set(dui::Prop::Display, static_cast<uint32_t>(hasKnowledge ? dui::Display::Flex : dui::Display::None));
+    detail_->Set(dui::Prop::Display, static_cast<uint32_t>(hasKnowledge ? dui::Display::Flex : dui::Display::None));
+    blank_->Set(dui::Prop::Display, static_cast<uint32_t>(hasKnowledge ? dui::Display::None : dui::Display::Flex));
+
+    selectedNodeDetailId_ = 0;
+    statusBar_->SetSelectedNode(L"");   // 切换知识 / 进入空白页：清空节点选中态
+
+    if (!hasKnowledge)
+    {
+        // 进入空白页前先保存当前详情，再清掉，避免残留旧知识内容。
+        detail_->Flush();
+        detail_->Clear();
+        detail_->SetHasKnowledge(false);
+        category_->SetSelected(0);
+        statusBar_->SetNodeCount(0);
+        ApplyPanelWidths();
+        return;
+    }
+
     detail_->SetHasKnowledge(true);
     category_->SetSelected(listId);
     canvas_->SetList(listId);
 
-    KnowListItem item;
-    if (KnowList::instance().get(listId, item))
+    db::KnowListItem item;
+    if (db::KnowList::instance().get(listId, item))
         detail_->Show(Detail::Kind::List, item.detailId, dui::Utf8ToWide(item.name.c_str()));
-    statusBar_->SetListName(ListName(listId));
+    ApplyPanelWidths();
 }
 
 void KnWindow::SelectGraphItem(int64_t nodeId, int64_t lineId)
 {
     if (nodeId != 0)
     {
-        KnowNodeItem item;
-        if (KnowNode::instance().get(nodeId, item))
-            detail_->Show(Detail::Kind::Node, item.detailId, dui::Utf8ToWide(item.title.c_str()));
+        db::KnowNodeItem item;
+        if (db::KnowNode::instance().get(nodeId, item))
+        {
+            const dui::String title = dui::Utf8ToWide(item.title.c_str());
+            detail_->Show(Detail::Kind::Node, item.detailId, title);
+            selectedNodeDetailId_ = item.detailId;
+            statusBar_->SetSelectedNode(title);
+        }
         return;
     }
     if (lineId != 0)
     {
-        KnowLineItem item;
-        if (KnowLine::instance().get(lineId, item))
-            detail_->Show(Detail::Kind::Line, item.detailId, L"连线");
+        db::KnowLineItem item;
+        if (db::KnowLine::instance().get(lineId, item))
+        {
+            // 连线标题为空时回落「连线」，与中点标签「空则不显示」的语义区分开：
+            // 详情面板总得有个标题。
+            dui::String title = dui::Utf8ToWide(item.title.c_str());
+            detail_->Show(Detail::Kind::Line, item.detailId,
+                          title.empty() ? dui::String(L"连线") : title);
+        }
+        selectedNodeDetailId_ = 0;
+        statusBar_->SetSelectedNode(L"");   // 选中连线不算选中节点
         return;
     }
 
-    KnowListItem item;
-    if (KnowList::instance().get(currentListId_, item))
+    db::KnowListItem item;
+    if (db::KnowList::instance().get(currentListId_, item))
         detail_->Show(Detail::Kind::List, item.detailId, dui::Utf8ToWide(item.name.c_str()));
+    selectedNodeDetailId_ = 0;
+    statusBar_->SetSelectedNode(L"");       // 点空白取消选中
 }
 
 void KnWindow::ShowTextDialog(const dui::String& prompt, const dui::String& initial,

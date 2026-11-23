@@ -4,12 +4,15 @@
 #include <string>
 #include <vector>
 
+namespace db {
+
 /**
  * know_line 表：知识点之间的关联（连线）。
  * 关联是**无向**的：存的时候把小的 id 放 node_a_id、大的放 node_b_id，
  * 于是 A-B 与 B-A 是同一条，由 UNIQUE 保证不重复。
  * 连线不跨知识：两端节点必须属于同一个 know_list。
  * color 是用户在右键菜单里挑的标记色（0 = 未着色，用默认样式）。
+ * title 是连线标题（默认空表示不显示；用户双击连线可就地编辑）。
  */
 struct KnowLineItem
 {
@@ -20,6 +23,7 @@ struct KnowLineItem
     int64_t createdAt = 0;
     int64_t updatedAt = 0;
     int color = 0;
+    std::string title;
 };
 
 class KnowLine
@@ -40,6 +44,8 @@ public:
     bool remove(int64_t id);
     /// 改标记色（超出 [0, maxColor] 的值会被夹到边界上）
     bool setColor(int64_t id, int color);
+    /// 改连线标题（空串表示不显示标题）
+    bool updateTitle(int64_t id, const std::string& title);
 
     /// 某个知识的全部连线
     std::vector<KnowLineItem> ofList(int64_t listId) const;
@@ -49,3 +55,5 @@ public:
 private:
     KnowLine();
 };
+
+}  // namespace db

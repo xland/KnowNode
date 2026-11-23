@@ -3,6 +3,8 @@
 #include <cstdint>
 #include <string>
 
+namespace db {
+
 /**
  * know_detail 表：富文本详情。
  * 节点（标题之外的正文）与连线（对这条关联的描述）各持有一条。
@@ -28,3 +30,5 @@ public:
 private:
     KnowDetail();
 };
+
+}  // namespace db

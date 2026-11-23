@@ -7,7 +7,7 @@
 | 表名 | 含义 | 列 |
 | --- | --- | --- |
 | `KnowNode` | 知识节点表 | `id`、知识标题 |
-| `KnowLine` | 知识连线表 | `id`、权重 |
+| `KnowLine` | 知识连线表 | `id`、两端节点、**标记色**、**标题** |
 | `KnowDetail` | 知识详情表 | `id`、知识详情、**关联类型**（关联到 KnowNode 还是 KnowLine）、**关联ID** |
 | `KnowList` | 知识列表表 | `id`、知识名称 |
 
@@ -109,6 +109,7 @@ CREATE TABLE IF NOT EXISTS know_line (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     color      INTEGER NOT NULL DEFAULT 0,   -- 标记色：0 = 未着色，1..6（见下）
+    title      TEXT    NOT NULL DEFAULT '',  -- 连线标题：用户在画布中点就地编辑，空 = 不显示
     CHECK (node_a_id < node_b_id),           -- 无向边的唯一表示
     UNIQUE (node_a_id, node_b_id)            -- 两节点之间最多一条连线
 );

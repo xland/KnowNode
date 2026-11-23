@@ -42,7 +42,7 @@ private:
     void LoadDoc(int64_t detailId);
 
     dui::Panel* handle_ = nullptr;
-    dui::Svg* arrow_ = nullptr;
+    dui::Text* arrow_ = nullptr;   // 字体图标：展开/收起时切换左右箭头码位
     Splitter* splitter_ = nullptr;
     dui::Panel* panel_ = nullptr;
     dui::Text* title_ = nullptr;

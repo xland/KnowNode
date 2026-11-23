@@ -2,7 +2,10 @@
 #include "Db.h"
 #include "DbStmt.h"
 #include "KnowDetail.h"
+#include "KnowNode.h"
 #include "../Util.h"
+
+namespace db {
 
 static const DbTableRegistrar<KnowList> registrar;
 
@@ -47,7 +50,14 @@ int64_t KnowList::add(const std::string& name)
     stmt.bindInt(3, now);
     stmt.bindInt(4, now);
     stmt.run();
-    return sqlite3_last_insert_rowid(conn);
+    const int64_t listId = sqlite3_last_insert_rowid(conn);
+    if (listId == 0) return 0;
+
+    // 新建知识送一个「未命名」节点，落在画布原点 (0,0)。
+    // Canvas::SetList 随后会 RequestCenter，把包围盒中心对到视口正中——
+    // 此时只有一个节点，它正好出现在画布正中心（Arch/32、34 的既定约定）。
+    KnowNode::instance().add(listId, 0.0, 0.0);
+    return listId;
 }
 
 bool KnowList::rename(int64_t id, const std::string& name)
@@ -128,3 +138,5 @@ bool KnowList::get(int64_t id, KnowListItem& out) const
     out.updatedAt = stmt.columnInt(4);
     return true;
 }
+
+}  // namespace db

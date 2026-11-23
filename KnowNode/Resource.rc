@@ -2,15 +2,7 @@
 
 100 ICON "..\\Doc\\logo.ico"
 
-LOGO_SVG         RCDATA "Resources\\logo.svg"
-ICON_CENTER      RCDATA "Resources\\center.svg"
-ICON_DETAIL_EXPAND  RCDATA "Resources\\detailExpand.svg"
-ICON_DETAIL_COLLAPSE RCDATA "Resources\\detailCollapse.svg"
-ICON_ADD_LIST    RCDATA "Resources\\addList.svg"
-ICON_LIST_BULLET RCDATA "Resources\\ToolbarIcons\\listBullet.svg"
-ICON_QUOTE       RCDATA "Resources\\ToolbarIcons\\quote.svg"
-ICON_CODE        RCDATA "Resources\\ToolbarIcons\\code.svg"
-ICON_IMAGE       RCDATA "Resources\\ToolbarIcons\\image.svg"
+IDR_ICONFONT     RCDATA "Resources\\iconfont.ttf"
 
 VS_VERSION_INFO VERSIONINFO
 FILEVERSION 1, 0, 0, 0

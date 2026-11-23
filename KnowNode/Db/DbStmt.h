@@ -2,6 +2,8 @@
 #include "../SQLite/sqlite3.h"
 #include <string>
 
+namespace db {
+
 /**
  * sqlite3_stmt 的轻量包装：构造时 prepare，析构时 finalize。
  * 表类里的 SQL 一律走它，省得每处都写一遍 prepare/bind/step/finalize 的样板。
@@ -56,3 +58,5 @@ private:
     sqlite3_stmt* stmt_ = nullptr;
     bool ok_ = false;
 };
+
+}  // namespace db

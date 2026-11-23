@@ -4,6 +4,8 @@
 #include "KnowDetail.h"
 #include "../Util.h"
 
+namespace db {
+
 static const DbTableRegistrar<KnowNode> registrar;
 
 KnowNode::KnowNode()
@@ -177,3 +179,5 @@ int64_t KnowNode::listIdOf(int64_t id) const
     stmt.bindInt(1, id);
     return stmt.step() ? stmt.columnInt(0) : 0;
 }
+
+}  // namespace db

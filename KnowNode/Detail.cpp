@@ -1,8 +1,7 @@
 #include "Detail.h"
 
-#include "DUI/UI/Svg.h"
-
 #include "Db/KnowDetail.h"
+#include "IconFont.h"
 #include "RichDocStore.h"
 
 namespace
@@ -11,25 +10,6 @@ namespace
 
     constexpr float kSplitterWidth = 4.f;
     constexpr float kHandleWidth = 14.f;
-
-    bool LoadSvgResource(dui::Svg* svg, const wchar_t* resourceName)
-    {
-        HRSRC res = FindResourceW(nullptr, resourceName, RT_RCDATA);
-        if (res == nullptr) return false;
-        HGLOBAL mem = LoadResource(nullptr, res);
-        if (mem == nullptr) return false;
-        const void* data = LockResource(mem);
-        const DWORD bytes = SizeofResource(nullptr, res);
-        if (data == nullptr || bytes == 0) return false;
-        return svg->LoadSvgMemory(data, static_cast<uint32_t>(bytes));
-    }
-
-    void AddSvgIcon(dui::Panel* parent, const wchar_t* resourceName, float size)
-    {
-        auto* svg = parent->AddChild<dui::Svg>(dui::Style()
-            .Width(size).Height(size).Padding(dui::Thickness(2.f)));
-        LoadSvgResource(svg, resourceName);
-    }
 }
 
 Detail::Detail()
@@ -42,9 +22,10 @@ Detail::Detail()
         .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
         .Background(0xFFF1F2F4).Cursor(dui::Cursor::Hand));
     handle_->When(dui::State::Hover, dui::Style().Background(0xFFE5E7EB));
-    arrow_ = handle_->AddChild<dui::Svg>(dui::Style()
-        .Width(12.f).Height(12.f).Cursor(dui::Cursor::Hand));
-    LoadSvgResource(arrow_, L"ICON_DETAIL_EXPAND");   // 默认折叠态 → 展开按钮（向左箭头）
+    // 默认折叠态 → 展开按钮（向左箭头）。收起/展开时由 ApplyLayout 切换码位。
+    arrow_ = IconFont::CreateIcon(handle_, IconFont::ArrowLeft, dui::Style()
+        .Width(14.f).Height(14.f).FontSize(13.f).Color(0xFF4C4F54)
+        .Cursor(dui::Cursor::Hand));
     handle_->OnClick([this](dui::PointerEvent&) { Toggle(); });
 
     splitter_ = AddChild<Splitter>(dui::Style()
@@ -69,47 +50,46 @@ Detail::Detail()
     title_ = head->AddChild<dui::Text>(L"", dui::Style()
         .FontSize(13.f).Color(0xFF1F2329).FlexGrow(1.f)
         .TextOverflow(dui::TextOverflow::Ellipsis));
-    auto* saveBtn = head->AddChild<dui::Button>(L"保存", dui::Style()
-        .FontSize(13.f).Color(0xFF2563EB).Padding(dui::Thickness(2.f, 8.f))
-        .Cursor(dui::Cursor::Hand));
-    saveBtn->OnClick([this](dui::PointerEvent&) { Flush(); });
 
     auto* toolbar = panel_->AddChild<dui::Panel>(dui::Style()
         .FlexDirection(dui::FlexDirection::Row)
-        .FlexWrap(true).Gap(4.f).Padding(dui::Thickness(6.f, 10.f))
-        .FlexShrink(0.f).Background(0xFFFAFAFA));
+        .FlexWrap(true).Gap(0.f).Padding(dui::Thickness(0.f))
+        .FlexShrink(0.f).Background(0xFFFAFAFA));   // 上下左右内边距全 0：高度 = 按钮高度，首钮贴左边
 
-    auto textTool = [toolbar](const wchar_t* label, auto fn)
-    {
-        auto* b = toolbar->AddChild<dui::Button>(label, dui::Style()
-            .FontSize(12.f).Color(0xFF374151)
-            .Padding(dui::Thickness(5.f, 8.f))
-            .Background(0xFFFFFFFF).BorderWidth(1.f).BorderColor(0xFFE5E7EB)
-            .CornerRadius(4.f).Cursor(dui::Cursor::Hand));
-        b->OnClick([fn](dui::PointerEvent&) { fn(); });
-    };
-    auto iconTool = [toolbar](const wchar_t* resourceName, auto fn)
+    // 工具按钮：无边框、无圆角、常态透明、紧密排列；仅 hover 时浮出一层浅灰底。
+    auto boxButton = [toolbar]() -> dui::Panel*
     {
         auto* b = toolbar->AddChild<dui::Panel>(dui::Style()
-            .Width(34.f).Height(28.f)
+            .Width(32.f).Height(30.f)
             .FlexDirection(dui::FlexDirection::Row)
             .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
-            .Background(0xFFFFFFFF).BorderWidth(1.f).BorderColor(0xFFE5E7EB)
-            .CornerRadius(4.f).Cursor(dui::Cursor::Hand));
-        b->When(dui::State::Hover, dui::Style().Background(0xFFF3F4F6));
-        AddSvgIcon(b, resourceName, 18.f);
+            .Cursor(dui::Cursor::Hand));
+        b->When(dui::State::Hover, dui::Style().Background(0xFFEFF1F6));
+        return b;
+    };
+    auto iconTool = [boxButton](wchar_t glyph, auto fn)
+    {
+        auto* b = boxButton();
+        IconFont::CreateIcon(b, glyph, dui::Style()
+            .Width(18.f).Height(18.f).FontSize(16.f).Color(0xFF6B7280));
         b->OnClick([fn](dui::PointerEvent&) { fn(); });
     };
-    textTool(L"标题", [this] { AppendBlock(rt::BlockKind::Heading); });
-    textTool(L"正文", [this] { AppendBlock(rt::BlockKind::Paragraph); });
-    iconTool(L"ICON_LIST_BULLET", [this] { AppendBlock(rt::BlockKind::List); });
-    iconTool(L"ICON_QUOTE", [this] { AppendBlock(rt::BlockKind::Quote); });
-    iconTool(L"ICON_CODE", [this] { AppendBlock(rt::BlockKind::Code); });
-    iconTool(L"ICON_IMAGE", [this] { InsertImageFile(); });
+
+    // 行内格式（对当前选区切换，需先选中文字才生效）
+    iconTool(IconFont::Bold, [this] { if (editor_->ToggleBold()) MarkDirty(); });
+    iconTool(IconFont::Italic, [this] { if (editor_->ToggleItalic()) MarkDirty(); });
+    iconTool(IconFont::Underline, [this] { if (editor_->ToggleUnderline()) MarkDirty(); });
+    iconTool(IconFont::Strike, [this] { if (editor_->ToggleStrike()) MarkDirty(); });
+    // 块级：分割线 + 原有四项
+    iconTool(IconFont::HorizonLine, [this] { AppendBlock(rt::BlockKind::Rule); });
+    iconTool(IconFont::ListBullet, [this] { AppendBlock(rt::BlockKind::List); });
+    iconTool(IconFont::Quote, [this] { AppendBlock(rt::BlockKind::Quote); });
+    iconTool(IconFont::Code, [this] { AppendBlock(rt::BlockKind::Code); });
+    iconTool(IconFont::Image, [this] { InsertImageFile(); });
 
     scroller_ = panel_->AddChild<dui::Scroller>(dui::Style().FlexGrow(1.f));
     editor_ = scroller_->AddChild<dui::RichEditor>(dui::Style()
-        .FlexGrow(1.f).Padding(dui::Thickness(18.f)).Background(0xFFFFFFFF));
+        .FlexGrow(1.f).Padding(dui::Thickness(12.f)).Background(0xFFFFFFFF));
     editor_->OnKeyDown([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnChar([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnPointerUp([this](dui::PointerEvent&) { MarkDirty(); });
@@ -150,7 +130,7 @@ void Detail::UpdateTitleIf(Kind kind, int64_t detailId, const dui::String& title
 void Detail::LoadDoc(int64_t detailId)
 {
     std::string json;
-    if (detailId != 0) json = KnowDetail::instance().content(detailId);
+    if (detailId != 0) json = db::KnowDetail::instance().content(detailId);
     RichDocStore::Load(json, doc_);
 }
 
@@ -165,7 +145,7 @@ void Detail::Flush()
     const dui::String json = RichDocStore::Save(editor_->Doc());
     if (json != lastSavedJson_)
     {
-        KnowDetail::instance().save(detailId_, dui::WideToUtf8(json));
+        db::KnowDetail::instance().save(detailId_, dui::WideToUtf8(json));
         lastSavedJson_ = json;
         doc_ = editor_->Doc();
     }
@@ -202,6 +182,9 @@ void Detail::AppendBlock(rt::BlockKind kind)
     case rt::BlockKind::Quote:
         block.kind = rt::BlockKind::Quote;
         block.runs.push_back(rt::Run{ L"", {} });
+        break;
+    case rt::BlockKind::Rule:
+        block.kind = rt::BlockKind::Rule;   // 水平分割线（框架已有类型，无行内内容）
         break;
     default:
         block.kind = rt::BlockKind::Paragraph;
@@ -253,7 +236,7 @@ void Detail::ApplyLayout()
 {
     handle_->Set(dui::Prop::Width, hasKnowledge_ ? kHandleWidth : 0.f);
     handle_->Set(dui::Prop::Visible, hasKnowledge_ ? 1u : 0u);
-    LoadSvgResource(arrow_, expanded_ ? L"ICON_DETAIL_COLLAPSE" : L"ICON_DETAIL_EXPAND");
+    IconFont::SetGlyph(arrow_, expanded_ ? IconFont::ArrowRight : IconFont::ArrowLeft);
     splitter_->Set(dui::Prop::Width, expanded_ ? kSplitterWidth : 0.f);
     splitter_->Set(dui::Prop::Visible, expanded_ ? 1u : 0u);
     panel_->Set(dui::Prop::Width, expanded_ ? width_ : 0.f);

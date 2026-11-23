@@ -4,6 +4,8 @@
 #include <string>
 #include <vector>
 
+namespace db {
+
 /**
  * know_node 表：知识内部的节点（一个知识点）。
  * 节点只属于一个知识（list_id）；坐标 x/y 由用户在画布上拖拽摆放后持久化。
@@ -56,3 +58,5 @@ public:
 private:
     KnowNode();
 };
+
+}  // namespace db

@@ -3,6 +3,8 @@
 #include "DbStmt.h"
 #include "../Util.h"
 
+namespace db {
+
 static const DbTableRegistrar<KnowDetail> registrar;
 
 KnowDetail::KnowDetail()
@@ -71,3 +73,5 @@ bool KnowDetail::remove(int64_t id)
     stmt.run();
     return sqlite3_changes(Db::instance().conn()) > 0;
 }
+
+}  // namespace db
