@@ -41,6 +41,11 @@ void KnWindow::OnCreate()
 bool KnWindow::OnClosing()
 {
     detail_->Flush();
+    if (newKnowledge_)
+    {
+        newKnowledge_->SetDone(nullptr);   // 断开业务回调，避免持有本窗口的悬空 this
+        newKnowledge_->Close();            // closed 回调会在下一轮 PostUi 里释放对象
+    }
     return true;
 }
 
@@ -151,11 +156,15 @@ void KnWindow::BuildUi()
     {
         detail_->UpdateTitleIf(Detail::Kind::Node, detailId, text);
         if (selectedNodeDetailId_ != 0 && detailId == selectedNodeDetailId_)
-            statusBar_->SetSelectedNode(text);   // 选中的节点改名 → 左下角同步
+            dui::Emit(kStatusSelectionEvent,
+                      StatusSelectionEvent{ StatusSelectionKind::Node, text });   // 选中的节点改名 → 左下角同步
     });
     canvas_->OnLineDetailTitle([this](int64_t detailId, const dui::String& text)
     {
         detail_->UpdateTitleIf(Detail::Kind::Line, detailId, text);
+        if (selectedLineDetailId_ != 0 && detailId == selectedLineDetailId_)
+            dui::Emit(kStatusSelectionEvent,
+                      StatusSelectionEvent{ StatusSelectionKind::Line, text });   // 选中的连线改名 → 左下角同步
     });
     canvas_->OnDeleted([this]
     {
@@ -182,6 +191,11 @@ void KnWindow::BuildUi()
     {
         canvas_->SetLineDirection(lineId, direction);
     });
+    detail_->OnTitleCommit([this](Detail::Kind kind, int64_t entityId, const dui::String& text)
+    {
+        if (kind == Detail::Kind::Node) canvas_->RenameNodeById(entityId, text);
+        else if (kind == Detail::Kind::Line) canvas_->RenameLineById(entityId, text);
+    });
     detail_->OnToggle([this] { ApplyPanelWidths(); });
     detail_->OnResize([this] { ApplyPanelWidths(); });
     detail_->OnWidthCommitted([this] { SavePanelWidths(); });
@@ -199,26 +213,11 @@ void KnWindow::BuildUi()
         return true;
     });
 
-    // 未选中任何知识时的空白页：占满画布+详情区域，居中一个“新建知识”按钮。
-    // 与画布/详情互斥切换 Display——不能只设 Visible，否则会继续占位把面板挤出屏幕。
+    // 未选中任何知识时的空白页：占满画布+详情区域。按钮仅在空白页时动态创建。
     blank_ = body->AddChild<dui::Panel>(dui::Style()
         .FlexGrow(1.f).FlexDirection(dui::FlexDirection::Column)
         .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
         .Background(0xFFF7F8FA));
-    auto* newKnowledgeBtn = blank_->AddChild<dui::Button>(L"新建知识", dui::Style()
-        .Padding(dui::Thickness(12.f, 26.f))
-        .FontSize(15.f).Color(0xFFFFFFFF).Background(0xFF1677FF)
-        .CornerRadius(6.f).Cursor(dui::Cursor::Hand));
-    newKnowledgeBtn->When(dui::State::Hover, dui::Style().Background(0xFF4096FF));
-    newKnowledgeBtn->OnClick([this](dui::PointerEvent&)
-    {
-        ShowTextDialog(L"知识名称", L"", [this](const dui::String& name)
-        {
-            if (name.empty()) return;
-            const int64_t id = db::KnowList::instance().add(dui::WideToUtf8(name));
-            if (id != 0) OpenList(id);
-        });
-    });
 
     statusBar_ = Root()->AddChild<StatusBar>();
 
@@ -274,6 +273,32 @@ void KnWindow::BuildDialogOverlay(dui::Panel* root)
     dialogOverlay_->Set(dui::Prop::Visible, 0u);
 }
 
+void KnWindow::CreateNewKnowledgeButton()
+{
+    if (newKnowledgeBtn_ != nullptr) return;
+    newKnowledgeBtn_ = blank_->AddChild<dui::Button>(L"新建知识", dui::Style()
+        .Padding(dui::Thickness(12.f, 26.f))
+        .FontSize(15.f).Color(0xFFFFFFFF).Background(0xFF1677FF)
+        .CornerRadius(6.f).Cursor(dui::Cursor::Hand));
+    newKnowledgeBtn_->When(dui::State::Hover, dui::Style().Background(0xFF4096FF));
+    newKnowledgeBtn_->OnClick([this](dui::PointerEvent&) { ShowNewKnowledgeWindow(); });
+}
+
+void KnWindow::ShowNewKnowledgeWindow()
+{
+    if (newKnowledge_ != nullptr) return;   // 已打开，不重复创建
+    dui::Lifetime life = category_->Lifetime();
+    newKnowledge_ = std::make_unique<KnowNew>([this, life](int64_t listId)
+    {
+        if (listId != 0) OpenList(listId);
+    });
+    newKnowledge_->SetClosed([life, this]
+    {
+        dui::PostUi(life, [this] { newKnowledge_.reset(); });   // 脱离 OnClosing 栈后释放
+    });
+    App()->AddWindow(*newKnowledge_);
+}
+
 void KnWindow::OpenList(int64_t listId)
 {
     const bool hasKnowledge = listId != 0;
@@ -284,8 +309,21 @@ void KnWindow::OpenList(int64_t listId)
     detail_->Set(dui::Prop::Display, static_cast<uint32_t>(hasKnowledge ? dui::Display::Flex : dui::Display::None));
     blank_->Set(dui::Prop::Display, static_cast<uint32_t>(hasKnowledge ? dui::Display::None : dui::Display::Flex));
 
+    // 按钮只在空白页存在：进入知识时销毁，进入空白页时创建。
+    if (hasKnowledge)
+    {
+        if (newKnowledgeBtn_ != nullptr)
+        {
+            blank_->RemoveChild(newKnowledgeBtn_);
+            newKnowledgeBtn_ = nullptr;
+        }
+    }
+    else
+        CreateNewKnowledgeButton();
+
     selectedNodeDetailId_ = 0;
-    statusBar_->SetSelectedNode(L"");   // 切换知识 / 进入空白页：清空节点选中态
+    selectedLineDetailId_ = 0;
+    dui::Emit(kStatusSelectionEvent, StatusSelectionEvent{});   // 切换知识 / 进入空白页：清空选中态
 
     if (!hasKnowledge)
     {
@@ -305,7 +343,7 @@ void KnWindow::OpenList(int64_t listId)
 
     db::KnowListItem item;
     if (db::KnowList::instance().get(listId, item))
-        detail_->Show(Detail::Kind::List, item.detailId, dui::Utf8ToWide(item.name.c_str()));
+        detail_->Show(Detail::Kind::List, item.detailId, 0, dui::Utf8ToWide(item.name.c_str()));
     ApplyPanelWidths();
 }
 
@@ -313,46 +351,46 @@ void KnWindow::SelectGraphItem(int64_t nodeId, int64_t lineId)
 {
     if (nodeId != 0)
     {
+        selectedLineDetailId_ = 0;
         db::KnowNodeItem item;
         if (db::KnowNode::instance().get(nodeId, item))
         {
             const dui::String title = dui::Utf8ToWide(item.title.c_str());
-            detail_->Show(Detail::Kind::Node, item.detailId, title);
+            detail_->Show(Detail::Kind::Node, item.detailId, nodeId, title);
             selectedNodeDetailId_ = item.detailId;
-            statusBar_->SetSelectedNode(title);
+            dui::Emit(kStatusSelectionEvent,
+                      StatusSelectionEvent{ StatusSelectionKind::Node, title });
         }
         return;
     }
     if (lineId != 0)
     {
+        selectedLineDetailId_ = 0;
         db::KnowLineItem item;
+        dui::String title;
         if (db::KnowLine::instance().get(lineId, item))
         {
             // 连线标题为空时回落「连线」，与中点标签「空则不显示」的语义区分开：
             // 详情面板总得有个标题。
-            dui::String title = dui::Utf8ToWide(item.title.c_str());
-            detail_->Show(Detail::Kind::Line, item.detailId,
+            title = dui::Utf8ToWide(item.title.c_str());
+            detail_->Show(Detail::Kind::Line, item.detailId, lineId,
                           title.empty() ? dui::String(L"连线") : title);
 
-            // 方向栏需要两端节点标题，A/B 与数据库一致（小 id 在前）。
-            db::KnowNodeItem na, nb;
-            dui::String titleA, titleB;
-            if (db::KnowNode::instance().get(item.nodeAId, na))
-                titleA = dui::Utf8ToWide(na.title.c_str());
-            if (db::KnowNode::instance().get(item.nodeBId, nb))
-                titleB = dui::Utf8ToWide(nb.title.c_str());
-            detail_->ShowDirection(lineId, item.direction, titleA, titleB);
+            detail_->ShowDirection(lineId, item.direction);
+            selectedLineDetailId_ = item.detailId;
         }
         selectedNodeDetailId_ = 0;
-        statusBar_->SetSelectedNode(L"");   // 选中连线不算选中节点
+        dui::Emit(kStatusSelectionEvent,
+                  StatusSelectionEvent{ StatusSelectionKind::Line, title.empty() ? L"连线" : title });
         return;
     }
 
     db::KnowListItem item;
     if (db::KnowList::instance().get(currentListId_, item))
-        detail_->Show(Detail::Kind::List, item.detailId, dui::Utf8ToWide(item.name.c_str()));
+        detail_->Show(Detail::Kind::List, item.detailId, 0, dui::Utf8ToWide(item.name.c_str()));
     selectedNodeDetailId_ = 0;
-    statusBar_->SetSelectedNode(L"");       // 点空白取消选中
+    selectedLineDetailId_ = 0;
+    dui::Emit(kStatusSelectionEvent, StatusSelectionEvent{});   // 点空白取消选中
 }
 
 void KnWindow::ShowTextDialog(const dui::String& prompt, const dui::String& initial,

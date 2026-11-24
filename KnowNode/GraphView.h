@@ -5,6 +5,10 @@
 
 #include "DUI/DUI.h"
 
+class GraphNode;
+class GraphNodeAddBtn;
+class GraphLineTitle;
+
 struct GraphNodeView
 {
     int64_t id = 0;
@@ -95,16 +99,19 @@ private:
     // 拉线候选目标：非源节点、且与源尚未连过（无向）。返回节点索引，否则 -1。
     int LinkTargetAt(const dui::Vec2& local) const;
     void SetCursorIfChanged(dui::Cursor c);
-    void RefreshLabels();
+    void RefreshElements();
+    void OnNodeDown(GraphNode* node, bool onEdge, dui::PointerEvent& ev);
+    bool SelectLine(int64_t lineId);   // 返回 true 表示本次点击触发了双击编辑
     void CenterView();     // 节点包围盒中心置于视口正中（按钮与加载后共用）
     // 连线中点（local 坐标）；两端节点缺失时返回 false。
     bool LineMidLocal(const GraphLineView& line, dui::Vec2& out) const;
 
     std::vector<GraphNodeView> nodes_;
     std::vector<GraphLineView> lines_;
-    std::vector<dui::Panel*> labelBoxes_;  // 节点标签的 flex 容器（借框架的墨迹居中补偿）
-    std::vector<dui::Text*> labels_;
-    std::vector<dui::Text*> lineLabels_;   // 连线中点标题（空标题的连线不放标签）
+    std::vector<GraphNode*> nodeBoxes_;    // 节点框+标题：绝对定位元素
+    std::vector<GraphLineTitle*> lineTitles_;  // 连线标题框+文本：绝对定位元素
+
+    GraphNodeAddBtn* addBtn_ = nullptr;    // 选中节点右侧加号：绝对定位元素
 
     dui::TextBox* editor_ = nullptr;
     int64_t editingNodeId_ = 0;

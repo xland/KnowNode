@@ -1,4 +1,7 @@
 #include "GraphView.h"
+#include "GraphNode.h"
+#include "GraphNodeAddBtn.h"
+#include "GraphLineTitle.h"
 
 #include <algorithm>
 #include <cmath>
@@ -6,7 +9,7 @@
 
 namespace
 {
-    // 老项目 MARK_COLORS：0 = 未着色，1..6 = 红橙黄绿蓝紫。
+    // 颜色编码：0 = 未着色，1..5 = 红橙黄绿紫（无蓝色）。
     dui::Color MarkColor(int color)
     {
         switch (color)
@@ -15,8 +18,7 @@ namespace
         case 2:  return 0xFFFA8C16;  // 橙
         case 3:  return 0xFFFADB14;  // 黄
         case 4:  return 0xFF52C41A;  // 绿
-        case 5:  return 0xFF1677FF;  // 蓝
-        case 6:  return 0xFF722ED1;  // 紫
+        case 5:  return 0xFF722ED1;  // 紫
         default: return 0;
         }
     }
@@ -123,6 +125,9 @@ GraphView::GraphView()
         if (ev.key == VK_TAB && HandleTabKey()) ev.handled = true;
     });
     OnPointerLeave([this](dui::PointerEvent&) { SetCursorIfChanged(dui::Cursor::Arrow); });
+
+    addBtn_ = AddChild<GraphNodeAddBtn>();
+    addBtn_->OnClick([this](int64_t nodeId) { addNode_(nodeId); });
 
     editor_ = AddChild<dui::TextBox>(dui::Style()
         .Position(dui::Position::Absolute)
@@ -293,81 +298,78 @@ int GraphView::HitLine(const dui::Vec2& local) const
     return -1;
 }
 
-void GraphView::RefreshLabels()
+void GraphView::RefreshElements()
 {
-    while (labelBoxes_.size() < nodes_.size())
+    const float nodeFont = std::max(10.f, std::min(20.f, 13.f * zoom_));
+
+    while (nodeBoxes_.size() < nodes_.size())
     {
-        auto* box = AddChild<dui::Panel>();
-        labelBoxes_.push_back(box);
-        labels_.push_back(box->AddChild<dui::Text>());
+        auto* node = AddChild<GraphNode>();
+        node->OnDown([this](GraphNode* n, bool onEdge, dui::PointerEvent& ev)
+        {
+            OnNodeDown(n, onEdge, ev);
+        });
+        nodeBoxes_.push_back(node);
     }
 
-    for (size_t i = 0; i < labelBoxes_.size(); ++i)
+    for (size_t i = 0; i < nodeBoxes_.size(); ++i)
     {
-        dui::Panel* box = labelBoxes_[i];
-        dui::Text* label = labels_[i];
+        GraphNode* node = nodeBoxes_[i];
         if (i >= nodes_.size())
         {
-            label->SetText(L"");
-            box->SetStyle(dui::Style().Display(dui::Display::None));
+            node->SetStyle(dui::Style().Display(dui::Display::None));
             continue;
         }
 
         const GraphNodeView& n = nodes_[i];
         const dui::Vec2 p = ToScreen({ static_cast<float>(n.x), static_cast<float>(n.y) });
-        const float w = NodeWidth(n.title) * zoom_;
-        const float h = NodeHeight() * zoom_;
-        const float font = std::max(10.f, std::min(20.f, 13.f * zoom_));
-
-        label->SetText(n.title);
-        // 容器盖住整个节点框，flex 双向居中。DUI 的墨迹视觉居中补偿只在 flex 居中
-        // 分支生效（Layout.cpp），能把雅黑汉字偏低的墨迹中心对齐到节点框正中。
-        // 绝对定位 Text 不走该分支，所以之前直接定 Text 会视觉偏下。
-        box->SetStyle(dui::Style()
-            .Position(dui::Position::Absolute)
-            .Left(p.x).Top(p.y).Width(std::max(20.f, w)).Height(h)
-            .FlexDirection(dui::FlexDirection::Row)
-            .JustifyContent(dui::Justify::Center)
-            .AlignItems(dui::Align::Center)
-            .Display(n.id == editingNodeId_ ? dui::Display::None : dui::Display::Flex));
-        label->SetStyle(dui::Style()
-            .FontSize(font).Color(0xFF1F2329)
-            .TextAlign(dui::TextAlign::Center)
-            .TextOverflow(dui::TextOverflow::Ellipsis));
+        const dui::Rect box{ p.x, p.y, NodeWidth(n.title) * zoom_, NodeHeight() * zoom_ };
+        const bool searchHit = !search_.empty() && n.title.find(search_) != dui::String::npos;
+        const bool selected = selectedNode_ == n.id;
+        const bool linkTarget = linking_ && static_cast<int>(i) == linkHoverIndex_;
+        const dui::Color border = linkTarget ? 0xFF1677FF
+                                : searchHit ? 0xFFF59E0B : NodeStroke(n.color, selected);
+        node->Refresh(n.title, box, NodeFill(n.color), border,
+                      linkTarget ? 2.f : 1.f, nodeFont, zoom_, n.id == editingNodeId_);
     }
 
-    while (lineLabels_.size() < lines_.size())
-        lineLabels_.push_back(AddChild<dui::Text>());
-
-    for (size_t i = 0; i < lineLabels_.size(); ++i)
+    while (lineTitles_.size() < lines_.size())
     {
-        dui::Text* label = lineLabels_[i];
+        auto* title = AddChild<GraphLineTitle>();
+        title->OnClick([this](int64_t lineId)
+        {
+            SelectLine(lineId);
+            RefreshElements();
+        });
+        lineTitles_.push_back(title);
+    }
+
+    for (size_t i = 0; i < lineTitles_.size(); ++i)
+    {
+        GraphLineTitle* title = lineTitles_[i];
         const bool show = i < lines_.size() && !lines_[i].title.empty()
             && lines_[i].id != editingLineId_;
         dui::Vec2 mid{ 0.f, 0.f };
         if (!show || !LineMidLocal(lines_[i], mid))
         {
-            label->SetText(L"");
-            label->SetStyle(dui::Style().Position(dui::Position::Absolute)
-                .Left(-100000.f).Top(-100000.f).Visible(false));
+            title->Hide();
             continue;
         }
-
         const float font = std::max(10.f, std::min(20.f, 12.f * zoom_));
-        const float labelW = std::max(28.f, static_cast<float>(lines_[i].title.size()) * font * 1.05f + 12.f);
-        const float labelH = font * 1.6f;
-        label->SetText(lines_[i].title);
-        label->SetStyle(dui::Style()
-            .Position(dui::Position::Absolute)
-            .Left(mid.x - labelW * 0.5f).Top(mid.y - labelH * 0.5f)
-            .Width(labelW).Height(labelH)
-            .Background(0xFFFFFFFF).BorderWidth(1.f).BorderColor(0xFFE5E6EB).CornerRadius(3.f)
-            .Padding(dui::Thickness(3.f, 0.f, 3.f, 0.f))
-            .FontSize(font).Color(0xFF6B7280)
-            .TextAlign(dui::TextAlign::Center)
-            .Cursor(dui::Cursor::Hand)
-            .Visible(true));
+        title->Refresh(lines_[i].id, lines_[i].title, mid, font,
+                       lines_[i].id == selectedLine_);
     }
+
+    // 加号按钮：跟随选中节点右侧，绘制与命中都由元素承担。
+    if (const GraphNodeView* n = AddButtonNode())
+    {
+        const dui::Vec2 pos = ToScreen({ static_cast<float>(n->x), static_cast<float>(n->y) });
+        const dui::Vec2 center{ pos.x + NodeWidth(n->title) * zoom_ + 15.f * zoom_,
+                                pos.y + NodeHeight() * zoom_ * 0.5f };
+        addBtn_->Refresh(n->id, center, 9.f * zoom_, true);
+    }
+    else
+        addBtn_->Refresh(0, {}, 0.f, false);
 }
 
 void GraphView::SetData(std::vector<GraphNodeView> nodes, std::vector<GraphLineView> lines)
@@ -376,7 +378,7 @@ void GraphView::SetData(std::vector<GraphNodeView> nodes, std::vector<GraphLineV
     lines_ = std::move(lines);
     selectedNode_ = 0;
     selectedLine_ = 0;
-    RefreshLabels();
+    RefreshElements();
     InvalidatePaint();
 }
 
@@ -399,7 +401,7 @@ void GraphView::SetSearch(const dui::String& text)
             const float cx = static_cast<float>(n.x + NodeWidth(n.title) * 0.5);
             const float cy = static_cast<float>(n.y + NodeHeight() * 0.5);
             pan_ = { b.w * 0.5f - cx * zoom_, b.h * 0.5f - cy * zoom_ };
-            RefreshLabels();
+            RefreshElements();
             break;
         }
     }
@@ -414,7 +416,7 @@ void GraphView::CenterView()
     {
         zoom_ = 1.f;
         pan_ = { b.w * 0.5f, b.h * 0.5f };
-        RefreshLabels();
+        RefreshElements();
         return;
     }
     double minX = std::numeric_limits<double>::max();
@@ -431,7 +433,7 @@ void GraphView::CenterView()
     const float cx = static_cast<float>((minX + maxX) * 0.5);
     const float cy = static_cast<float>((minY + maxY) * 0.5);
     pan_ = { b.w * 0.5f - cx * zoom_, b.h * 0.5f - cy * zoom_ };
-    RefreshLabels();
+    RefreshElements();
 }
 
 void GraphView::ResetView()
@@ -462,7 +464,7 @@ void GraphView::BeginTitleEdit(int64_t nodeId)
         editor_->SelectAll();
         editor_->Focus();
         editingNodeId_ = nodeId;
-        RefreshLabels();   // 隐藏正在编辑的标签，避免文字重叠
+        RefreshElements();   // 隐藏正在编辑的标签，避免文字重叠
         InvalidatePaint();
         return;
     }
@@ -491,7 +493,7 @@ void GraphView::BeginLineTitleEdit(int64_t lineId)
         editor_->SelectAll();
         editor_->Focus();
         editingLineId_ = lineId;
-        RefreshLabels();   // 隐藏正在编辑的连线标签，避免文字重叠
+        RefreshElements();   // 隐藏正在编辑的连线标签，避免文字重叠
         InvalidatePaint();
         return;
     }
@@ -520,7 +522,7 @@ void GraphView::CommitTitleEdit(bool commit)
         else if (lineId != 0 && commitLineTitle_)
             commitLineTitle_(lineId, text);   // 连线允许空串 = 不显示标题
     }
-    RefreshLabels();
+    RefreshElements();
     InvalidatePaint();
 }
 
@@ -534,7 +536,7 @@ void GraphView::UpdateNodeTitle(int64_t nodeId, const dui::String& text)
             break;
         }
     }
-    RefreshLabels();
+    RefreshElements();
     InvalidatePaint();
 }
 
@@ -548,7 +550,7 @@ void GraphView::UpdateLineTitle(int64_t lineId, const dui::String& text)
             break;
         }
     }
-    RefreshLabels();
+    RefreshElements();
     InvalidatePaint();
 }
 
@@ -579,6 +581,7 @@ bool GraphView::HandleTabKey()
 void GraphView::OnPaint(dui::graphics::Painter& p, const dui::StyleContext&, float scale)
 {
     const dui::Rect b = Bounds();
+
     // 加载后延迟居中：此处 Bounds 已有效，复位缩放后把所有节点置于视口正中（与按钮一致）。
     if (pendingCenter_ && b.w > 0.f && b.h > 0.f)
     {
@@ -646,37 +649,87 @@ void GraphView::OnPaint(dui::graphics::Painter& p, const dui::StyleContext&, flo
                          0xFF1677FF, 2.f, scale);
     }
 
-    for (size_t i = 0; i < nodes_.size(); ++i)
+}
+
+void GraphView::OnNodeDown(GraphNode* node, bool onEdge, dui::PointerEvent& ev)
+{
+    int ni = -1;
+    for (size_t i = 0; i < nodeBoxes_.size(); ++i)
     {
-        const GraphNodeView& n = nodes_[i];
-        const dui::Vec2 pos = ToScreen({ static_cast<float>(n.x), static_cast<float>(n.y) });
-        const dui::Rect box{ b.x + pos.x, b.y + pos.y,
-                             NodeWidth(n.title) * zoom_, NodeHeight() * zoom_ };
-        const float radius = 3.f * zoom_;
+        if (nodeBoxes_[i] == node) { ni = static_cast<int>(i); break; }
+    }
+    if (ni < 0 || ni >= static_cast<int>(nodes_.size())) return;
 
-        p.FillRoundedRect(box, radius, NodeFill(n.color), 1.f, scale);
+    const dui::Vec2 local = ToLocal(ev.pos);
+    pressLocal_ = local;
 
-        const bool searchHit = !search_.empty() && n.title.find(search_) != dui::String::npos;
-        const bool selected = selectedNode_ == n.id;
-        const bool linkTarget = linking_ && static_cast<int>(i) == linkHoverIndex_;
-        const dui::Color border = linkTarget ? 0xFF1677FF
-                                : searchHit ? 0xFFF59E0B : NodeStroke(n.color, selected);
-        p.StrokeRoundRect(box, radius, linkTarget ? 2.f : 1.f, border, scale);
+    if (onEdge)
+    {
+        selectedNode_ = nodes_[ni].id;
+        selectedLine_ = 0;
+        if (select_) select_(selectedNode_, 0);
+        linking_ = true;
+        dragIndex_ = ni;
+        dragNodeId_ = nodes_[ni].id;
+        linkHoverIndex_ = -1;
+        linkPoint_ = local;
+        SetCursorIfChanged(dui::Cursor::Crosshair);
+        SetCapture();
+        RefreshElements();
+        InvalidatePaint();
+        return;
     }
 
-    // 选中节点右侧的加号（老项目 addBtn）：蓝圆 + 白十字，画在最后置于顶层。
-    if (const GraphNodeView* n = AddButtonNode())
+    const uint64_t now = GetTickCount64();
+    if (lastClickNode_ == nodes_[ni].id && now - lastClickMs_ < 350 && openNode_)
     {
-        const dui::Vec2 pos = ToScreen({ static_cast<float>(n->x), static_cast<float>(n->y) });
-        const float cx = b.x + pos.x + NodeWidth(n->title) * zoom_ + 15.f * zoom_;
-        const float cy = b.y + pos.y + NodeHeight() * zoom_ * 0.5f;
-        const float r = 9.f * zoom_;
-        p.FillEllipse({ cx, cy }, r, r, 0xFF1677FF, scale);
-        const float arm = 4.f * zoom_;
-        const float stroke = 1.6f * zoom_;
-        p.StrokeLine({ cx - arm, cy }, { cx + arm, cy }, 0xFFFFFFFF, stroke, scale);
-        p.StrokeLine({ cx, cy - arm }, { cx, cy + arm }, 0xFFFFFFFF, stroke, scale);
+        openNode_(nodes_[ni].id);
+        lastClickMs_ = 0;
+        lastClickNode_ = 0;
+        return;
     }
+    lastClickMs_ = now;
+    lastClickNode_ = nodes_[ni].id;
+
+    selectedNode_ = nodes_[ni].id;
+    selectedLine_ = 0;
+    if (select_) select_(selectedNode_, 0);
+    Focus();   // 选中节点后取得焦点，Tab 才能新建关联节点
+    draggingNode_ = true;
+    dragIndex_ = ni;
+    dragNodeId_ = nodes_[ni].id;
+    const dui::Vec2 model = ToModel(local);
+    dragOffset_ = { static_cast<float>(model.x - nodes_[ni].x),
+                    static_cast<float>(model.y - nodes_[ni].y) };
+    SetCursorIfChanged(dui::Cursor::Move);
+    SetCapture();
+    RefreshElements();
+    InvalidatePaint();
+}
+
+bool GraphView::SelectLine(int64_t lineId)
+{
+    selectedNode_ = 0;
+    selectedLine_ = lineId;
+    if (select_) select_(selectedNode_, selectedLine_);
+
+    // 双击连线 → 就地编辑标题（与节点双击同构，节点双击走 openNode_ 回调）。
+    if (lineId != 0)
+    {
+        const uint64_t now = GetTickCount64();
+        if (lastClickLine_ == lineId && now - lastClickMs_ < 350)
+        {
+            BeginLineTitleEdit(lineId);
+            lastClickMs_ = 0;
+            lastClickLine_ = 0;
+            return true;
+        }
+        lastClickMs_ = now;
+        lastClickLine_ = lineId;
+    }
+    else
+        lastClickLine_ = 0;
+    return false;
 }
 
 bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
@@ -700,99 +753,17 @@ bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
     if (ev.button != dui::PointerButton::Left)
         return false;
 
-    // 加号命中优先于节点：点在圆内则新建关联节点，不当作拖拽节点。
-    if (const GraphNodeView* n = AddButtonNode())
+    const int li = HitLine(local);
+    if (SelectLine(li >= 0 ? lines_[li].id : 0))
     {
-        const dui::Vec2 pos = ToScreen({ static_cast<float>(n->x), static_cast<float>(n->y) });
-        const float cx = pos.x + NodeWidth(n->title) * zoom_ + 15.f * zoom_;
-        const float cy = pos.y + NodeHeight() * zoom_ * 0.5f;
-        const float dx = local.x - cx;
-        const float dy = local.y - cy;
-        const float r = 11.f * zoom_;   // 半径 9 + 容差 2
-        if (dx * dx + dy * dy <= r * r)
-        {
-            addNode_(n->id);
-            ev.handled = true;
-            return true;
-        }
-    }
-
-    const int ni = HitNode(local);
-    if (ni >= 0)
-    {
-        // 边缘 6px 热区 → 拉线建关联；矩形中间仍是拖动节点 / 双击编辑。
-        if (HitNodeEdge(local) >= 0)
-        {
-            selectedNode_ = nodes_[ni].id;
-            selectedLine_ = 0;
-            if (select_) select_(selectedNode_, 0);
-            linking_ = true;
-            dragIndex_ = ni;
-            dragNodeId_ = nodes_[ni].id;
-            linkHoverIndex_ = -1;
-            linkPoint_ = local;
-            SetCursorIfChanged(dui::Cursor::Crosshair);
-            SetCapture();
-            InvalidatePaint();
-            ev.handled = true;
-            return true;
-        }
-
-        const uint64_t now = GetTickCount64();
-        if (lastClickNode_ == nodes_[ni].id && now - lastClickMs_ < 350 && openNode_)
-        {
-            openNode_(nodes_[ni].id);
-            lastClickMs_ = 0;
-            lastClickNode_ = 0;
-            ev.handled = true;
-            return true;
-        }
-        lastClickMs_ = now;
-        lastClickNode_ = nodes_[ni].id;
-
-        selectedNode_ = nodes_[ni].id;
-        selectedLine_ = 0;
-        if (select_) select_(selectedNode_, 0);
-        Focus();   // 选中节点后取得焦点，Tab 才能新建关联节点
-        draggingNode_ = true;
-        dragIndex_ = ni;
-        dragNodeId_ = nodes_[ni].id;
-        const dui::Vec2 model = ToModel(local);
-        dragOffset_ = { static_cast<float>(model.x - nodes_[ni].x),
-                        static_cast<float>(model.y - nodes_[ni].y) };
-        SetCursorIfChanged(dui::Cursor::Move);
-        SetCapture();
-        InvalidatePaint();
         ev.handled = true;
         return true;
     }
 
-    const int li = HitLine(local);
-    selectedNode_ = 0;
-    selectedLine_ = li >= 0 ? lines_[li].id : 0;
-    if (select_) select_(selectedNode_, selectedLine_);
-
-    // 双击连线 → 就地编辑标题（与节点双击同构，节点双击走 openNode_ 回调）。
-    if (li >= 0)
-    {
-        const uint64_t now = GetTickCount64();
-        if (lastClickLine_ == lines_[li].id && now - lastClickMs_ < 350)
-        {
-            BeginLineTitleEdit(lines_[li].id);
-            lastClickMs_ = 0;
-            lastClickLine_ = 0;
-            ev.handled = true;
-            return true;
-        }
-        lastClickMs_ = now;
-        lastClickLine_ = lines_[li].id;
-    }
-    else
-        lastClickLine_ = 0;
-
     panning_ = true;
     lastLocal_ = local;
     SetCapture();
+    RefreshElements();   // 取消节点选中后隐藏加号
     InvalidatePaint();
     ev.handled = true;
     return true;
@@ -814,7 +785,7 @@ bool GraphView::HandlePointerMove(dui::PointerEvent& ev)
         const dui::Vec2 model = ToModel(local);
         nodes_[dragIndex_].x = static_cast<double>(model.x - dragOffset_.x);
         nodes_[dragIndex_].y = static_cast<double>(model.y - dragOffset_.y);
-        RefreshLabels();
+        RefreshElements();
         InvalidatePaint();
         ev.handled = true;
         return true;
@@ -824,7 +795,7 @@ bool GraphView::HandlePointerMove(dui::PointerEvent& ev)
         pan_.x += local.x - lastLocal_.x;
         pan_.y += local.y - lastLocal_.y;
         lastLocal_ = local;
-        RefreshLabels();
+        RefreshElements();
         InvalidatePaint();
         ev.handled = true;
         return true;
@@ -870,7 +841,8 @@ bool GraphView::HandlePointerUp(dui::PointerEvent& ev)
     dragIndex_ = -1;
     linkHoverIndex_ = -1;
     SetCursorIfChanged(dui::Cursor::Arrow);
-    InvalidatePaint();   // 拖拽结束后让加号重新出现
+    RefreshElements();   // 拖拽结束后让加号重新出现
+    InvalidatePaint();
     ev.handled = true;
     return true;
 }
@@ -886,7 +858,7 @@ bool GraphView::HandleWheel(dui::WheelEvent& ev)
     pan_.x = center.x - static_cast<float>(modelCenter.x) * zoom_;
     pan_.y = center.y - static_cast<float>(modelCenter.y) * zoom_;
 
-    RefreshLabels();
+    RefreshElements();
     InvalidatePaint();
     ev.handled = true;
     return true;

@@ -47,9 +47,10 @@ Detail::Detail()
         .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
         .Padding(dui::Thickness(12.f, 0.f, 8.f, 0.f))
         .Background(0xFFF6F6F6));
-    title_ = head->AddChild<dui::Text>(L"", dui::Style()
+    title_ = head->AddChild<dui::TextBox>(dui::Style()
         .FontSize(13.f).Color(0xFF1F2329).FlexGrow(1.f)
-        .TextOverflow(dui::TextOverflow::Ellipsis));
+        .BorderWidth(0.f).Background(0xFFFFFFFF));
+    title_->OnSubmit([this] { CommitTitle(); });
 
     // 连线箭头方向栏：三个互斥单选（Radio 图标 + 文字），仅连线时显示。
     dirBar_ = panel_->AddChild<dui::Panel>(dui::Style()
@@ -58,9 +59,7 @@ Detail::Detail()
         .Padding(dui::Thickness(12.f, 0.f, 8.f, 0.f)).Gap(16.f)
         .Background(0xFFFFFFFF)
         .Display(dui::Display::None));
-    auto* dirCaption = dirBar_->AddChild<dui::Text>(L"箭头方向", dui::Style()
-        .FontSize(12.f).Color(0xFF8A8F99).FlexShrink(0.f));
-    (void)dirCaption;
+    const wchar_t* dirTexts[3] = { L"正向", L"反向", L"双向" };
     for (int i = 0; i < 3; ++i)
     {
         auto* opt = dirBar_->AddChild<dui::Panel>(dui::Style()
@@ -68,7 +67,7 @@ Detail::Detail()
             .Gap(4.f).Cursor(dui::Cursor::Hand).FlexShrink(0.f));
         dirRadios_[i] = opt->AddChild<dui::Icon>(dui::Style()
             .Width(14.f).Height(14.f).Color(0xFF1677FF));
-        dirLabels_[i] = opt->AddChild<dui::Text>(L"", dui::Style()
+        dirLabels_[i] = opt->AddChild<dui::Text>(dirTexts[i], dui::Style()
             .FontSize(12.f).Color(0xFF1F2329));
         opt->OnClick([this, i](dui::PointerEvent&) { SetDirection(i); });
     }
@@ -120,17 +119,20 @@ Detail::Detail()
     ApplyLayout();
 }
 
-void Detail::Show(Kind kind, int64_t detailId, const dui::String& title)
+void Detail::Show(Kind kind, int64_t detailId, int64_t entityId, const dui::String& title)
 {
+    CommitTitle();   // 切换实体前先提交上一个标题，避免写到新实体上
     Flush();
     kind_ = kind;
     detailId_ = detailId;
+    entityId_ = entityId;
     if (kind != Kind::Line)
     {
         dirLineId_ = 0;
         dirBar_->SetStyle(dui::Style().Display(dui::Display::None));
     }
     title_->SetText(title);
+    lastTitle_ = title;
     LoadDoc(detailId);
     editor_->SetDoc(doc_);
     editor_->SetEditable(detailId != 0);
@@ -138,8 +140,7 @@ void Detail::Show(Kind kind, int64_t detailId, const dui::String& title)
     dirty_ = false;
 }
 
-void Detail::ShowDirection(int64_t lineId, int direction,
-                           const dui::String& titleA, const dui::String& titleB)
+void Detail::ShowDirection(int64_t lineId, int direction)
 {
     if (kind_ != Kind::Line)
     {
@@ -147,17 +148,6 @@ void Detail::ShowDirection(int64_t lineId, int direction,
         dirLineId_ = 0;
         return;
     }
-
-    // 标题过长会挤爆方向栏，截到 6 个字加省略号
-    auto clip = [](const dui::String& s) -> dui::String
-    {
-        return s.size() > 6 ? s.substr(0, 6) + L"…" : s;
-    };
-    const dui::String a = clip(titleA);
-    const dui::String b = clip(titleB);
-    dirLabels_[0]->SetText(a + L" → " + b);
-    dirLabels_[1]->SetText(b + L" → " + a);
-    dirLabels_[2]->SetText(a + L" ↔ " + b);
 
     dirLineId_ = lineId;
     direction_ = (direction >= 0 && direction <= 2) ? direction : 0;
@@ -181,20 +171,38 @@ void Detail::SetDirection(int direction, bool notify)
 
 void Detail::Clear()
 {
+    CommitTitle();
     kind_ = Kind::None;
     detailId_ = 0;
+    entityId_ = 0;
     dirLineId_ = 0;
     dirBar_->SetStyle(dui::Style().Display(dui::Display::None));
+}
+
+void Detail::CommitTitle()
+{
+    if (entityId_ == 0 || (kind_ != Kind::Node && kind_ != Kind::Line)) return;
+    dui::String text = title_->GetText();
+    if (text == lastTitle_) return;
+    if (kind_ == Kind::Node && text.empty()) text = L"未命名";
+    lastTitle_ = text;
+    title_->SetText(text);
+    if (onTitleCommit_) onTitleCommit_(kind_, entityId_, text);
 }
 
 void Detail::SetTitle(const dui::String& title)
 {
     title_->SetText(title);
+    lastTitle_ = title;
 }
 
 void Detail::UpdateTitleIf(Kind kind, int64_t detailId, const dui::String& title)
 {
-    if (kind_ == kind && detailId_ == detailId) title_->SetText(title);
+    if (kind_ == kind && detailId_ == detailId)
+    {
+        title_->SetText(title);
+        lastTitle_ = title;
+    }
 }
 
 void Detail::LoadDoc(int64_t detailId)

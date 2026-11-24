@@ -19,6 +19,8 @@ public:
     void SetList(int64_t listId);
     void Refresh();
     void SetLineDirection(int64_t lineId, int direction);
+    void RenameNodeById(int64_t nodeId, const dui::String& text);
+    void RenameLineById(int64_t lineId, const dui::String& text);
 
     void OnSelectItem(std::function<void(int64_t, int64_t)> fn) { onSelectItem_ = std::move(fn); }
     void OnDetailTitle(std::function<void(int64_t, const dui::String&)> fn) { onDetailTitle_ = std::move(fn); }

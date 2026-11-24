@@ -1,12 +1,14 @@
 #pragma once
 
 #include <functional>
+#include <memory>
 #include <vector>
 
 #include "Canvas.h"
 #include "DUI/DUI.h"
 #include "KnowList.h"
 #include "Detail.h"
+#include "KnowNew.h"
 #include "Splitter.h"
 #include "StatusBar.h"
 #include "TitleBar.h"
@@ -29,6 +31,8 @@ protected:
 
 private:
     void BuildUi();
+    void CreateNewKnowledgeButton();
+    void ShowNewKnowledgeWindow();
     void BuildDialogOverlay(dui::Panel* root);
     void ShowMenuAtClient(const dui::Menu& menu, dui::Vec2 clientPosDip);
     void ApplyPanelWidths();
@@ -44,7 +48,9 @@ private:
     KnowList* category_ = nullptr;
     Canvas* canvas_ = nullptr;
     Detail* detail_ = nullptr;
-    dui::Panel* blank_ = nullptr;   // 未选中知识时的空白页（含“新建知识”按钮）
+    dui::Panel* blank_ = nullptr;            // 未选中知识时的空白页
+    dui::Button* newKnowledgeBtn_ = nullptr; // 仅在空白页存在
+    std::unique_ptr<KnowNew> newKnowledge_;  // 新建知识窗口，关闭后延迟释放
     StatusBar* statusBar_ = nullptr;
     TitleBar* titleBar_ = nullptr;
     Splitter* listSplitter_ = nullptr;
@@ -59,4 +65,5 @@ private:
 
     int64_t currentListId_ = 0;
     int64_t selectedNodeDetailId_ = 0;   // 当前选中节点的详情 id（0 = 未选中节点）
+    int64_t selectedLineDetailId_ = 0;   // 当前选中连线的详情 id（0 = 未选中连线）
 };

@@ -32,7 +32,7 @@ class KnowLine
 {
 public:
     /// 标记色的数量：0 = 未着色，1..maxColor 是具体的颜色，与前端那组色值一一对应
-    static constexpr int maxColor = 6;
+    static constexpr int maxColor = 5;
 
     static KnowLine& instance();
 

@@ -17,8 +17,7 @@ namespace
         case 2: return L"橙";
         case 3: return L"黄";
         case 4: return L"绿";
-        case 5: return L"蓝";
-        case 6: return L"紫";
+        case 5: return L"紫";
         default: return L"无";
         }
     }
@@ -55,21 +54,11 @@ Canvas::Canvas()
     });
     graph_->OnCommitTitle([this](int64_t nodeId, const dui::String& text)
     {
-        db::KnowNodeItem item;
-        if (!db::KnowNode::instance().get(nodeId, item)) return;
-        const int64_t oldDetail = item.detailId;
-        db::KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
-        graph_->UpdateNodeTitle(nodeId, text);
-        if (onDetailTitle_) onDetailTitle_(oldDetail, text);
+        RenameNodeById(nodeId, text);
     });
     graph_->OnCommitLineTitle([this](int64_t lineId, const dui::String& text)
     {
-        db::KnowLineItem item;
-        if (!db::KnowLine::instance().get(lineId, item)) return;
-        const int64_t oldDetail = item.detailId;
-        db::KnowLine::instance().updateTitle(lineId, dui::WideToUtf8(text));
-        graph_->UpdateLineTitle(lineId, text);
-        if (onLineDetailTitle_) onLineDetailTitle_(oldDetail, text);
+        RenameLineById(lineId, text);
     });
 
     // 悬浮卡片样式（老项目 .knowNetSearch / .knowNetCenter）：白底、1px #e5e6eb、
@@ -152,7 +141,7 @@ void Canvas::ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double
         menu.Add(L"新建关联节点", [this, nodeId] { CreateRelatedNode(nodeId); });
 
         dui::Menu colors;
-        for (int i = 0; i <= 6; ++i)
+        for (int i = 0; i <= 5; ++i)
             colors.Add(ColorName(i), [this, nodeId, lineId, i] { SetGraphColor(nodeId, lineId, i); });
         menu.AddSubMenu(L"标记颜色", colors);
         menu.Separator();
@@ -162,7 +151,7 @@ void Canvas::ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double
     {
         menu.Add(L"重命名", [this, lineId] { RenameLine(lineId); });
         dui::Menu colors;
-        for (int i = 0; i <= 6; ++i)
+        for (int i = 0; i <= 5; ++i)
             colors.Add(ColorName(i), [this, nodeId, lineId, i] { SetGraphColor(nodeId, lineId, i); });
         menu.AddSubMenu(L"标记颜色", colors);
         menu.Separator();
@@ -215,6 +204,26 @@ void Canvas::SetLineDirection(int64_t lineId, int direction)
     if (lineId == 0) return;
     db::KnowLine::instance().setDirection(lineId, direction);
     graph_->UpdateLineDirection(lineId, direction);   // 原地刷新，不重置选中/视图
+}
+
+void Canvas::RenameNodeById(int64_t nodeId, const dui::String& text)
+{
+    db::KnowNodeItem item;
+    if (!db::KnowNode::instance().get(nodeId, item)) return;
+    const int64_t oldDetail = item.detailId;
+    db::KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
+    graph_->UpdateNodeTitle(nodeId, text);
+    if (onDetailTitle_) onDetailTitle_(oldDetail, text);
+}
+
+void Canvas::RenameLineById(int64_t lineId, const dui::String& text)
+{
+    db::KnowLineItem item;
+    if (!db::KnowLine::instance().get(lineId, item)) return;
+    const int64_t oldDetail = item.detailId;
+    db::KnowLine::instance().updateTitle(lineId, dui::WideToUtf8(text));
+    graph_->UpdateLineTitle(lineId, text);
+    if (onLineDetailTitle_) onLineDetailTitle_(oldDetail, text);
 }
 
 void Canvas::CreateNode(double x, double y)

@@ -75,6 +75,7 @@
   <ItemGroup>
     <ClCompile Include="Canvas.cpp" />
     <ClCompile Include="KnowList.cpp" />
+    <ClCompile Include="KnowNew.cpp" />
     <ClCompile Include="Detail.cpp" />
     <ClCompile Include="KnWindow.cpp" />
     <ClCompile Include="Splitter.cpp" />
@@ -88,6 +89,9 @@
     <ClCompile Include="Db\Setting.cpp" />
     <ClCompile Include="Env.cpp" />
     <ClCompile Include="GraphView.cpp" />
+    <ClCompile Include="GraphNode.cpp" />
+    <ClCompile Include="GraphNodeAddBtn.cpp" />
+    <ClCompile Include="GraphLineTitle.cpp" />
     <ClCompile Include="IconFont.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RichDocStore.cpp" />
@@ -97,6 +101,7 @@
   <ItemGroup>
     <ClInclude Include="Canvas.h" />
     <ClInclude Include="KnowList.h" />
+    <ClInclude Include="KnowNew.h" />
     <ClInclude Include="Detail.h" />
     <ClInclude Include="KnWindow.h" />
     <ClInclude Include="Splitter.h" />
@@ -111,6 +116,9 @@
     <ClInclude Include="Db\Setting.h" />
     <ClInclude Include="Env.h" />
     <ClInclude Include="GraphView.h" />
+    <ClInclude Include="GraphNode.h" />
+    <ClInclude Include="GraphNodeAddBtn.h" />
+    <ClInclude Include="GraphLineTitle.h" />
     <ClInclude Include="IconFont.h" />
     <ClInclude Include="RichDocStore.h" />
     <ClInclude Include="SQLite\sqlite3.h" />

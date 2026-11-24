@@ -40,17 +40,6 @@ void KnowLine::create(sqlite3* conn)
         ");";
     Db::execOrFatal(conn, sql, L"创建 know_line 表失败");
 
-    // 旧库迁移：IF NOT EXISTS 不会给已存在的表补列，用 table_info 探测后补上。
-    bool hasDirection = false;
-    DbStmt cols{ conn, "PRAGMA table_info(know_line);" };
-    if (cols.ok())
-        while (cols.step())
-            if (cols.columnText(1) == "direction") { hasDirection = true; break; }
-    if (!hasDirection)
-        Db::execOrFatal(conn,
-            "ALTER TABLE know_line ADD COLUMN direction INTEGER NOT NULL DEFAULT 0;",
-            L"迁移 know_line 表（新增 direction 列）失败");
-
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_a ON know_line(node_a_id);", L"创建 know_line 索引 idx_line_a 失败");
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);", L"创建 know_line 索引 idx_line_b 失败");
 }

@@ -14,7 +14,9 @@ public:
 
     Detail();
 
-    void Show(Kind kind, int64_t detailId, const dui::String& title);
+    // entityId：节点 id / 连线 id（Kind::List 传 0），标题提交时用于写库。
+    // 切换实体会先提交当前标题，再更新 detailId_/entityId_。
+    void Show(Kind kind, int64_t detailId, int64_t entityId, const dui::String& title);
     void Clear();
     void Flush();
 
@@ -35,11 +37,16 @@ public:
     void SetPickImage(std::function<bool(dui::String&)> fn) { pickImage_ = std::move(fn); }
     /// 连线箭头方向变更：回调参数为 (lineId, direction: 0=A→B 1=B→A 2=双向)
     void OnLineDirection(std::function<void(int64_t, int)> fn) { onLineDirection_ = std::move(fn); }
+    /// 标题提交：回调参数为 (kind, entityId, text)，仅 Node/Line 触发
+    void OnTitleCommit(std::function<void(Kind, int64_t, const dui::String&)> fn)
+    {
+        onTitleCommit_ = std::move(fn);
+    }
     /// 选中连线时设定方向栏上下文；kind 非 Line 时方向栏隐藏。
-    void ShowDirection(int64_t lineId, int direction,
-                       const dui::String& titleA, const dui::String& titleB);
+    void ShowDirection(int64_t lineId, int direction);
 
 private:
+    void CommitTitle();
     void SetDirection(int direction, bool notify = true);
     void Toggle();
     void AppendBlock(dui::richtext::BlockKind kind);
@@ -51,7 +58,7 @@ private:
     dui::Text* arrow_ = nullptr;   // 字体图标：展开/收起时切换左右箭头码位
     Splitter* splitter_ = nullptr;
     dui::Panel* panel_ = nullptr;
-    dui::Text* title_ = nullptr;
+    dui::TextBox* title_ = nullptr;
     dui::Panel* dirBar_ = nullptr;             // 连线箭头方向栏（仅连线可见）
     dui::Icon* dirRadios_[3] = {};             // 三个单选项的圆点图标
     dui::Text* dirLabels_[3] = {};             // 三个单选项的文字
@@ -60,6 +67,8 @@ private:
 
     Kind kind_ = Kind::None;
     int64_t detailId_ = 0;
+    int64_t entityId_ = 0;                     // 当前标题对应的节点 / 连线 id
+    dui::String lastTitle_;                    // 本次 Show 时的标题，用于判断是否需要提交
     int64_t dirLineId_ = 0;                    // 当前方向栏对应的连线 id
     int direction_ = 0;
     dui::richtext::RichDoc doc_;
@@ -75,4 +84,5 @@ private:
     std::function<void()> onWidthCommitted_;
     std::function<bool(dui::String&)> pickImage_;
     std::function<void(int64_t, int)> onLineDirection_;
+    std::function<void(Kind, int64_t, const dui::String&)> onTitleCommit_;
 };
