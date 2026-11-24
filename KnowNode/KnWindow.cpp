@@ -10,7 +10,7 @@
 
 namespace
 {
-    constexpr float kListMin = 300.f;
+    constexpr float kListMin = 220.f;
     constexpr float kDetailMin = 300.f;
     constexpr float kCanvasMin = 500.f;
     constexpr float kSplitterWidth = 4.f;    // splitter 命中区宽度（同老项目 .splitter）
@@ -178,6 +178,10 @@ void KnWindow::BuildUi()
     });
 
     detail_ = body->AddChild<Detail>();
+    detail_->OnLineDirection([this](int64_t lineId, int direction)
+    {
+        canvas_->SetLineDirection(lineId, direction);
+    });
     detail_->OnToggle([this] { ApplyPanelWidths(); });
     detail_->OnResize([this] { ApplyPanelWidths(); });
     detail_->OnWidthCommitted([this] { SavePanelWidths(); });
@@ -329,6 +333,15 @@ void KnWindow::SelectGraphItem(int64_t nodeId, int64_t lineId)
             dui::String title = dui::Utf8ToWide(item.title.c_str());
             detail_->Show(Detail::Kind::Line, item.detailId,
                           title.empty() ? dui::String(L"连线") : title);
+
+            // 方向栏需要两端节点标题，A/B 与数据库一致（小 id 在前）。
+            db::KnowNodeItem na, nb;
+            dui::String titleA, titleB;
+            if (db::KnowNode::instance().get(item.nodeAId, na))
+                titleA = dui::Utf8ToWide(na.title.c_str());
+            if (db::KnowNode::instance().get(item.nodeBId, nb))
+                titleB = dui::Utf8ToWide(nb.title.c_str());
+            detail_->ShowDirection(lineId, item.direction, titleA, titleB);
         }
         selectedNodeDetailId_ = 0;
         statusBar_->SetSelectedNode(L"");   // 选中连线不算选中节点

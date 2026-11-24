@@ -33,8 +33,14 @@ public:
     void OnResize(std::function<void()> fn) { onResize_ = std::move(fn); }
     void OnWidthCommitted(std::function<void()> fn) { onWidthCommitted_ = std::move(fn); }
     void SetPickImage(std::function<bool(dui::String&)> fn) { pickImage_ = std::move(fn); }
+    /// 连线箭头方向变更：回调参数为 (lineId, direction: 0=A→B 1=B→A 2=双向)
+    void OnLineDirection(std::function<void(int64_t, int)> fn) { onLineDirection_ = std::move(fn); }
+    /// 选中连线时设定方向栏上下文；kind 非 Line 时方向栏隐藏。
+    void ShowDirection(int64_t lineId, int direction,
+                       const dui::String& titleA, const dui::String& titleB);
 
 private:
+    void SetDirection(int direction, bool notify = true);
     void Toggle();
     void AppendBlock(dui::richtext::BlockKind kind);
     void InsertImageFile();
@@ -46,11 +52,16 @@ private:
     Splitter* splitter_ = nullptr;
     dui::Panel* panel_ = nullptr;
     dui::Text* title_ = nullptr;
+    dui::Panel* dirBar_ = nullptr;             // 连线箭头方向栏（仅连线可见）
+    dui::Icon* dirRadios_[3] = {};             // 三个单选项的圆点图标
+    dui::Text* dirLabels_[3] = {};             // 三个单选项的文字
     dui::Scroller* scroller_ = nullptr;
     dui::RichEditor* editor_ = nullptr;
 
     Kind kind_ = Kind::None;
     int64_t detailId_ = 0;
+    int64_t dirLineId_ = 0;                    // 当前方向栏对应的连线 id
+    int direction_ = 0;
     dui::richtext::RichDoc doc_;
     dui::String lastSavedJson_;
     bool dirty_ = false;
@@ -63,4 +74,5 @@ private:
     std::function<void()> onResize_;
     std::function<void()> onWidthCommitted_;
     std::function<bool(dui::String&)> pickImage_;
+    std::function<void(int64_t, int)> onLineDirection_;
 };

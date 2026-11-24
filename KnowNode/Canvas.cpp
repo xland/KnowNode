@@ -134,6 +134,7 @@ void Canvas::Refresh()
         v.b = l.nodeBId;
         v.color = l.color;
         v.title = dui::Utf8ToWide(l.title.c_str());
+        v.direction = l.direction;
         lines.push_back(std::move(v));
     }
 
@@ -207,6 +208,13 @@ void Canvas::SetGraphColor(int64_t nodeId, int64_t lineId, int color)
     if (nodeId != 0) db::KnowNode::instance().setColor(nodeId, color);
     if (lineId != 0) db::KnowLine::instance().setColor(lineId, color);
     Refresh();
+}
+
+void Canvas::SetLineDirection(int64_t lineId, int direction)
+{
+    if (lineId == 0) return;
+    db::KnowLine::instance().setDirection(lineId, direction);
+    graph_->UpdateLineDirection(lineId, direction);   // 原地刷新，不重置选中/视图
 }
 
 void Canvas::CreateNode(double x, double y)

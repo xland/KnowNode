@@ -51,6 +51,28 @@ Detail::Detail()
         .FontSize(13.f).Color(0xFF1F2329).FlexGrow(1.f)
         .TextOverflow(dui::TextOverflow::Ellipsis));
 
+    // 连线箭头方向栏：三个互斥单选（Radio 图标 + 文字），仅连线时显示。
+    dirBar_ = panel_->AddChild<dui::Panel>(dui::Style()
+        .Height(38.f).FlexShrink(0.f)
+        .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
+        .Padding(dui::Thickness(12.f, 0.f, 8.f, 0.f)).Gap(16.f)
+        .Background(0xFFFFFFFF)
+        .Display(dui::Display::None));
+    auto* dirCaption = dirBar_->AddChild<dui::Text>(L"箭头方向", dui::Style()
+        .FontSize(12.f).Color(0xFF8A8F99).FlexShrink(0.f));
+    (void)dirCaption;
+    for (int i = 0; i < 3; ++i)
+    {
+        auto* opt = dirBar_->AddChild<dui::Panel>(dui::Style()
+            .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
+            .Gap(4.f).Cursor(dui::Cursor::Hand).FlexShrink(0.f));
+        dirRadios_[i] = opt->AddChild<dui::Icon>(dui::Style()
+            .Width(14.f).Height(14.f).Color(0xFF1677FF));
+        dirLabels_[i] = opt->AddChild<dui::Text>(L"", dui::Style()
+            .FontSize(12.f).Color(0xFF1F2329));
+        opt->OnClick([this, i](dui::PointerEvent&) { SetDirection(i); });
+    }
+
     auto* toolbar = panel_->AddChild<dui::Panel>(dui::Style()
         .FlexDirection(dui::FlexDirection::Row)
         .FlexWrap(true).Gap(0.f).Padding(dui::Thickness(0.f))
@@ -103,6 +125,11 @@ void Detail::Show(Kind kind, int64_t detailId, const dui::String& title)
     Flush();
     kind_ = kind;
     detailId_ = detailId;
+    if (kind != Kind::Line)
+    {
+        dirLineId_ = 0;
+        dirBar_->SetStyle(dui::Style().Display(dui::Display::None));
+    }
     title_->SetText(title);
     LoadDoc(detailId);
     editor_->SetDoc(doc_);
@@ -111,10 +138,53 @@ void Detail::Show(Kind kind, int64_t detailId, const dui::String& title)
     dirty_ = false;
 }
 
+void Detail::ShowDirection(int64_t lineId, int direction,
+                           const dui::String& titleA, const dui::String& titleB)
+{
+    if (kind_ != Kind::Line)
+    {
+        dirBar_->SetStyle(dui::Style().Display(dui::Display::None));
+        dirLineId_ = 0;
+        return;
+    }
+
+    // 标题过长会挤爆方向栏，截到 6 个字加省略号
+    auto clip = [](const dui::String& s) -> dui::String
+    {
+        return s.size() > 6 ? s.substr(0, 6) + L"…" : s;
+    };
+    const dui::String a = clip(titleA);
+    const dui::String b = clip(titleB);
+    dirLabels_[0]->SetText(a + L" → " + b);
+    dirLabels_[1]->SetText(b + L" → " + a);
+    dirLabels_[2]->SetText(a + L" ↔ " + b);
+
+    dirLineId_ = lineId;
+    direction_ = (direction >= 0 && direction <= 2) ? direction : 0;
+    SetDirection(direction_, false);   // 仅刷新单选图标，不写库
+    dirBar_->SetStyle(dui::Style()
+        .Height(38.f).FlexShrink(0.f)
+        .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
+        .Padding(dui::Thickness(12.f, 0.f, 8.f, 0.f)).Gap(16.f)
+        .Background(0xFFFFFFFF)
+        .Display(dui::Display::Flex));
+}
+
+void Detail::SetDirection(int direction, bool notify)
+{
+    direction_ = direction;
+    for (int i = 0; i < 3; ++i)
+        dirRadios_[i]->SetIcon(i == direction ? dui::IconName::RadioChecked
+                                              : dui::IconName::Radio);
+    if (notify && dirLineId_ != 0 && onLineDirection_) onLineDirection_(dirLineId_, direction);
+}
+
 void Detail::Clear()
 {
     kind_ = Kind::None;
     detailId_ = 0;
+    dirLineId_ = 0;
+    dirBar_->SetStyle(dui::Style().Display(dui::Display::None));
 }
 
 void Detail::SetTitle(const dui::String& title)

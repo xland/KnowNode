@@ -21,6 +21,7 @@ struct GraphLineView
     int64_t b = 0;
     int color = 0;
     dui::String title;
+    int direction = 0;   // 箭头方向：0 = A→B，1 = B→A，2 = 双向
 };
 
 class GraphView final : public dui::Panel
@@ -66,6 +67,7 @@ public:
     bool HandleTabKey();                 // Tab：提交当前编辑并以该节点为源新建关联节点
     void UpdateNodeTitle(int64_t nodeId, const dui::String& text);   // 仅更新标题，不重置视图
     void UpdateLineTitle(int64_t lineId, const dui::String& text);   // 仅更新连线标题，不重置视图
+    void UpdateLineDirection(int64_t lineId, int direction);         // 仅更新箭头方向，不重置视图
 
 protected:
     dui::Vec2 MeasureContent(const dui::StyleContext& ctx, const dui::Vec2& avail) const override;
@@ -100,6 +102,7 @@ private:
 
     std::vector<GraphNodeView> nodes_;
     std::vector<GraphLineView> lines_;
+    std::vector<dui::Panel*> labelBoxes_;  // 节点标签的 flex 容器（借框架的墨迹居中补偿）
     std::vector<dui::Text*> labels_;
     std::vector<dui::Text*> lineLabels_;   // 连线中点标题（空标题的连线不放标签）
 

@@ -13,6 +13,7 @@ namespace db {
  * 连线不跨知识：两端节点必须属于同一个 know_list。
  * color 是用户在右键菜单里挑的标记色（0 = 未着色，用默认样式）。
  * title 是连线标题（默认空表示不显示；用户双击连线可就地编辑）。
+ * direction 是箭头方向：0 = A→B，1 = B→A，2 = 双向（A/B 即 nodeAId/nodeBId）。
  */
 struct KnowLineItem
 {
@@ -24,6 +25,7 @@ struct KnowLineItem
     int64_t updatedAt = 0;
     int color = 0;
     std::string title;
+    int direction = 0;
 };
 
 class KnowLine
@@ -46,6 +48,8 @@ public:
     bool setColor(int64_t id, int color);
     /// 改连线标题（空串表示不显示标题）
     bool updateTitle(int64_t id, const std::string& title);
+    /// 改箭头方向：0 = A→B，1 = B→A，2 = 双向（超出范围夹到边界）
+    bool setDirection(int64_t id, int direction);
 
     /// 某个知识的全部连线
     std::vector<KnowLineItem> ofList(int64_t listId) const;

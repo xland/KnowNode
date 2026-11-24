@@ -81,6 +81,33 @@ namespace
         const float cy = a.y + t * dy;
         return std::sqrt((p.x - cx) * (p.x - cx) + (p.y - cy) * (p.y - cy));
     }
+
+    // 从矩形中心 center 沿单位向量 dir 到矩形边界的交点。用来把箭头放在连线与
+    // 节点边缘处，而不是节点中心——节点在连线之后绘制，中心的箭头会被整块盖住。
+    dui::Vec2 RayRectEdge(const dui::Vec2& center, const dui::Vec2& dir,
+                          float halfW, float halfH)
+    {
+        const float tx = std::abs(dir.x) > 1e-6f ? halfW / std::abs(dir.x)
+                                                 : std::numeric_limits<float>::infinity();
+        const float ty = std::abs(dir.y) > 1e-6f ? halfH / std::abs(dir.y)
+                                                 : std::numeric_limits<float>::infinity();
+        const float t = std::min(tx, ty);
+        return { center.x + dir.x * t, center.y + dir.y * t };
+    }
+
+    constexpr float kLineWidth = 1.4f;   // 连线与箭头的描边宽度（DIP）
+
+    // 开放 V 形箭头（非实心）：尖端 tip 朝向 dir（指向目标节点）。
+    void StrokeArrowHead(dui::graphics::Painter& p, const dui::Vec2& tip,
+                         const dui::Vec2& dir, dui::Color color, float zoom, float scale)
+    {
+        const float arm = 9.f * zoom;
+        const float spread = 4.f * zoom;
+        const dui::Vec2 perp{ -dir.y, dir.x };
+        const dui::Vec2 back{ tip.x - dir.x * arm, tip.y - dir.y * arm };
+        p.StrokeLine(tip, { back.x + perp.x * spread, back.y + perp.y * spread }, color, kLineWidth, scale);
+        p.StrokeLine(tip, { back.x - perp.x * spread, back.y - perp.y * spread }, color, kLineWidth, scale);
+    }
 }
 
 GraphView::GraphView()
@@ -268,17 +295,21 @@ int GraphView::HitLine(const dui::Vec2& local) const
 
 void GraphView::RefreshLabels()
 {
-    while (labels_.size() < nodes_.size())
-        labels_.push_back(AddChild<dui::Text>());
-
-    for (size_t i = 0; i < labels_.size(); ++i)
+    while (labelBoxes_.size() < nodes_.size())
     {
+        auto* box = AddChild<dui::Panel>();
+        labelBoxes_.push_back(box);
+        labels_.push_back(box->AddChild<dui::Text>());
+    }
+
+    for (size_t i = 0; i < labelBoxes_.size(); ++i)
+    {
+        dui::Panel* box = labelBoxes_[i];
         dui::Text* label = labels_[i];
         if (i >= nodes_.size())
         {
             label->SetText(L"");
-            label->SetStyle(dui::Style().Position(dui::Position::Absolute)
-                .Left(-100000.f).Top(-100000.f).Visible(false));
+            box->SetStyle(dui::Style().Display(dui::Display::None));
             continue;
         }
 
@@ -289,14 +320,20 @@ void GraphView::RefreshLabels()
         const float font = std::max(10.f, std::min(20.f, 13.f * zoom_));
 
         label->SetText(n.title);
-        label->SetStyle(dui::Style()
+        // 容器盖住整个节点框，flex 双向居中。DUI 的墨迹视觉居中补偿只在 flex 居中
+        // 分支生效（Layout.cpp），能把雅黑汉字偏低的墨迹中心对齐到节点框正中。
+        // 绝对定位 Text 不走该分支，所以之前直接定 Text 会视觉偏下。
+        box->SetStyle(dui::Style()
             .Position(dui::Position::Absolute)
-            .Left(p.x).Top(p.y + (h - font * 1.6f) * 0.5f)
-            .Width(std::max(20.f, w)).Height(font * 1.6f)
+            .Left(p.x).Top(p.y).Width(std::max(20.f, w)).Height(h)
+            .FlexDirection(dui::FlexDirection::Row)
+            .JustifyContent(dui::Justify::Center)
+            .AlignItems(dui::Align::Center)
+            .Display(n.id == editingNodeId_ ? dui::Display::None : dui::Display::Flex));
+        label->SetStyle(dui::Style()
             .FontSize(font).Color(0xFF1F2329)
             .TextAlign(dui::TextAlign::Center)
-            .TextOverflow(dui::TextOverflow::Ellipsis)
-            .Visible(n.id != editingNodeId_));
+            .TextOverflow(dui::TextOverflow::Ellipsis));
     }
 
     while (lineLabels_.size() < lines_.size())
@@ -328,6 +365,7 @@ void GraphView::RefreshLabels()
             .Padding(dui::Thickness(3.f, 0.f, 3.f, 0.f))
             .FontSize(font).Color(0xFF6B7280)
             .TextAlign(dui::TextAlign::Center)
+            .Cursor(dui::Cursor::Hand)
             .Visible(true));
     }
 }
@@ -514,6 +552,19 @@ void GraphView::UpdateLineTitle(int64_t lineId, const dui::String& text)
     InvalidatePaint();
 }
 
+void GraphView::UpdateLineDirection(int64_t lineId, int direction)
+{
+    for (GraphLineView& l : lines_)
+    {
+        if (l.id == lineId)
+        {
+            l.direction = direction;
+            break;
+        }
+    }
+    InvalidatePaint();
+}
+
 bool GraphView::HandleTabKey()
 {
     if (editingNodeId_ != 0 || editingLineId_ != 0) return false;   // 编辑中的 Tab 由 editor 自己处理
@@ -552,8 +603,35 @@ void GraphView::OnPaint(dui::graphics::Painter& p, const dui::StyleContext&, flo
         const dui::Vec2 pc = ToScreen({ static_cast<float>(c->x + NodeWidth(c->title) * 0.5),
                                        static_cast<float>(c->y + NodeHeight() * 0.5) });
         const bool selected = selectedLine_ == line.id;
-        p.StrokeLine({ b.x + pa.x, b.y + pa.y }, { b.x + pc.x, b.y + pc.y },
-                     LineStroke(line.color, selected), 2.f, scale);
+        const dui::Color stroke = LineStroke(line.color, selected);
+        p.StrokeLine({ b.x + pa.x, b.y + pa.y }, { b.x + pc.x, b.y + pc.y }, stroke, kLineWidth, scale);
+
+        // 箭头画在连线与节点边缘交点外侧一点，避免被后绘制的节点盖住。
+        // dir 为 A→B 单位向量；A 端箭头指向 A（用 -dir），B 端箭头指向 B（用 dir）。
+        if (line.direction != 0 && line.direction != 1 && line.direction != 2)
+            continue;
+        const dui::Vec2 delta{ pc.x - pa.x, pc.y - pa.y };
+        const float dist = std::sqrt(delta.x * delta.x + delta.y * delta.y);
+        if (dist < 1.f) continue;
+        const dui::Vec2 dir{ delta.x / dist, delta.y / dist };
+        const float halfWA = NodeWidth(a->title) * zoom_ * 0.5f;
+        const float halfHA = NodeHeight() * zoom_ * 0.5f;
+        const float halfWB = NodeWidth(c->title) * zoom_ * 0.5f;
+        const float halfHB = NodeHeight() * zoom_ * 0.5f;
+
+        // direction: 0=A→B（B 端），1=B→A（A 端），2=双向（两端都画）。
+        // 箭尖直接落在射线与节点矩形的交点上，正好碰到节点边缘；箭头两翼朝外张开，
+        // 不会被后绘制的节点盖住（节点只盖住矩形内部）。
+        if (line.direction == 0 || line.direction == 2)
+        {
+            const dui::Vec2 e = RayRectEdge(pc, { -dir.x, -dir.y }, halfWB, halfHB);
+            StrokeArrowHead(p, { b.x + e.x, b.y + e.y }, dir, stroke, zoom_, scale);
+        }
+        if (line.direction == 1 || line.direction == 2)
+        {
+            const dui::Vec2 e = RayRectEdge(pa, dir, halfWA, halfHA);
+            StrokeArrowHead(p, { b.x + e.x, b.y + e.y }, { -dir.x, -dir.y }, stroke, zoom_, scale);
+        }
     }
 
     // 拉线预览：源节点中心 → 指针，蓝色虚线。与正式连线同层、画在节点之前，
@@ -752,11 +830,13 @@ bool GraphView::HandlePointerMove(dui::PointerEvent& ev)
         return true;
     }
 
-    // 悬停反馈：节点边缘 → 十字（可拉线），节点中间 → 移动（可拖动），空白 → 箭头。
+    // 悬停反馈：节点边缘 → 十字（可拉线），节点中间 → 移动（可拖动），连线 → 手型，空白 → 箭头。
     if (HitNodeEdge(local) >= 0)
         SetCursorIfChanged(dui::Cursor::Crosshair);
-    else if (HitNode(local) >= 0 || HitLine(local) >= 0)
+    else if (HitNode(local) >= 0)
         SetCursorIfChanged(dui::Cursor::Move);
+    else if (HitLine(local) >= 0)
+        SetCursorIfChanged(dui::Cursor::Hand);
     else
         SetCursorIfChanged(dui::Cursor::Arrow);
     return false;

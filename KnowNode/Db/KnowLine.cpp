@@ -34,10 +34,22 @@ void KnowLine::create(sqlite3* conn)
         "    updated_at INTEGER NOT NULL,"
         "    color      INTEGER NOT NULL DEFAULT 0,"
         "    title      TEXT    NOT NULL DEFAULT '',"
+        "    direction  INTEGER NOT NULL DEFAULT 0,"
         "    CHECK (node_a_id < node_b_id),"
         "    UNIQUE (node_a_id, node_b_id)"
         ");";
     Db::execOrFatal(conn, sql, L"创建 know_line 表失败");
+
+    // 旧库迁移：IF NOT EXISTS 不会给已存在的表补列，用 table_info 探测后补上。
+    bool hasDirection = false;
+    DbStmt cols{ conn, "PRAGMA table_info(know_line);" };
+    if (cols.ok())
+        while (cols.step())
+            if (cols.columnText(1) == "direction") { hasDirection = true; break; }
+    if (!hasDirection)
+        Db::execOrFatal(conn,
+            "ALTER TABLE know_line ADD COLUMN direction INTEGER NOT NULL DEFAULT 0;",
+            L"迁移 know_line 表（新增 direction 列）失败");
 
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_a ON know_line(node_a_id);", L"创建 know_line 索引 idx_line_a 失败");
     Db::execOrFatal(conn, "CREATE INDEX IF NOT EXISTS idx_line_b ON know_line(node_b_id);", L"创建 know_line 索引 idx_line_b 失败");
@@ -129,11 +141,26 @@ bool KnowLine::updateTitle(int64_t id, const std::string& title)
     return sqlite3_changes(Db::instance().conn()) > 0;
 }
 
+bool KnowLine::setDirection(int64_t id, int direction)
+{
+    if (direction < 0) direction = 0;
+    if (direction > 2) direction = 2;
+
+    DbStmt stmt{ Db::instance().conn(),
+        "UPDATE know_line SET direction = ?, updated_at = ? WHERE id = ?;" };
+    if (!stmt.ok()) return false;
+    stmt.bindInt(1, direction);
+    stmt.bindInt(2, Util::nowMillis());
+    stmt.bindInt(3, id);
+    stmt.run();
+    return sqlite3_changes(Db::instance().conn()) > 0;
+}
+
 std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
 {
     std::vector<KnowLineItem> items;
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT l.id, l.node_a_id, l.node_b_id, l.detail_id, l.created_at, l.updated_at, l.color, l.title"
+        "SELECT l.id, l.node_a_id, l.node_b_id, l.detail_id, l.created_at, l.updated_at, l.color, l.title, l.direction"
         "  FROM know_line l"
         "  JOIN know_node n ON n.id = l.node_a_id"
         " WHERE n.list_id = ?"
@@ -151,6 +178,7 @@ std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
         item.updatedAt = stmt.columnInt(5);
         item.color = static_cast<int>(stmt.columnInt(6));
         item.title = stmt.columnText(7);
+        item.direction = static_cast<int>(stmt.columnInt(8));
         items.push_back(std::move(item));
     }
     return items;
@@ -159,7 +187,7 @@ std::vector<KnowLineItem> KnowLine::ofList(int64_t listId) const
 bool KnowLine::get(int64_t id, KnowLineItem& out) const
 {
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, node_a_id, node_b_id, detail_id, created_at, updated_at, color, title"
+        "SELECT id, node_a_id, node_b_id, detail_id, created_at, updated_at, color, title, direction"
         "  FROM know_line WHERE id = ?;" };
     if (!stmt.ok()) return false;
     stmt.bindInt(1, id);
@@ -172,6 +200,7 @@ bool KnowLine::get(int64_t id, KnowLineItem& out) const
     out.updatedAt = stmt.columnInt(5);
     out.color = static_cast<int>(stmt.columnInt(6));
     out.title = stmt.columnText(7);
+    out.direction = static_cast<int>(stmt.columnInt(8));
     return true;
 }
 
