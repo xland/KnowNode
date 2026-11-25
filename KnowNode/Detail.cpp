@@ -43,12 +43,12 @@ Detail::Detail()
         .Background(0xFFFFFFFF));
 
     auto* head = panel_->AddChild<dui::Panel>(dui::Style()
-        .Height(28.f).FlexShrink(0.f)
+        .Height(36.f).FlexShrink(0.f)
         .FlexDirection(dui::FlexDirection::Row).AlignItems(dui::Align::Center)
-        .Padding(dui::Thickness(12.f, 0.f, 8.f, 0.f))
         .Background(0xFFF6F6F6));
     title_ = head->AddChild<dui::TextBox>(dui::Style()
-        .FontSize(13.f).Color(0xFF1F2329).FlexGrow(1.f)
+        .Height(36.f).FontSize(13.f).Color(0xFF1F2329).FlexGrow(1.f)
+        .Margin(dui::Thickness(0.f)).Padding(dui::Thickness(0.f, 8.f))
         .BorderWidth(0.f).Background(0xFFFFFFFF));
     title_->OnSubmit([this] { CommitTitle(); });
 
@@ -77,7 +77,7 @@ Detail::Detail()
         .FlexWrap(true).Gap(0.f).Padding(dui::Thickness(0.f))
         .FlexShrink(0.f).Background(0xFFFAFAFA));   // 上下左右内边距全 0：高度 = 按钮高度，首钮贴左边
 
-    // 工具按钮：无边框、无圆角、常态透明、紧密排列；仅 hover 时浮出一层浅灰底。
+    // 工具按钮：无边框、无圆角、常态透明、紧密排列；hover 浅灰底，选中蓝底。
     auto boxButton = [toolbar]() -> dui::Panel*
     {
         auto* b = toolbar->AddChild<dui::Panel>(dui::Style()
@@ -86,18 +86,20 @@ Detail::Detail()
             .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
             .Cursor(dui::Cursor::Hand));
         b->When(dui::State::Hover, dui::Style().Background(0xFFEFF1F6));
+        b->When(dui::State::Selected, dui::Style().Background(0xFFDCEAFF));
         return b;
     };
-    auto iconTool = [boxButton](wchar_t glyph, auto fn)
+    auto iconTool = [boxButton](wchar_t glyph, auto fn) -> dui::Panel*
     {
         auto* b = boxButton();
         IconFont::CreateIcon(b, glyph, dui::Style()
             .Width(18.f).Height(18.f).FontSize(16.f).Color(0xFF6B7280));
         b->OnClick([fn](dui::PointerEvent&) { fn(); });
+        return b;
     };
 
     // 行内格式（对当前选区切换，需先选中文字才生效）
-    iconTool(IconFont::Bold, [this] { if (editor_->ToggleBold()) MarkDirty(); });
+    boldBtn_ = iconTool(IconFont::Bold, [this] { if (editor_->ToggleBold()) MarkDirty(); });
     iconTool(IconFont::Italic, [this] { if (editor_->ToggleItalic()) MarkDirty(); });
     iconTool(IconFont::Underline, [this] { if (editor_->ToggleUnderline()) MarkDirty(); });
     iconTool(IconFont::Strike, [this] { if (editor_->ToggleStrike()) MarkDirty(); });
@@ -110,11 +112,17 @@ Detail::Detail()
 
     scroller_ = panel_->AddChild<dui::Scroller>(dui::Style().FlexGrow(1.f));
     editor_ = scroller_->AddChild<dui::RichEditor>(dui::Style()
-        .FlexGrow(1.f).Padding(dui::Thickness(12.f)).Background(0xFFFFFFFF));
+        .FlexGrow(1.f).Padding(dui::Thickness(8.f)).Background(0xFFFFFFFF));
     editor_->OnKeyDown([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnChar([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnPointerUp([this](dui::PointerEvent&) { MarkDirty(); });
     editor_->OnDropFiles([this](dui::DropFilesEvent&) { MarkDirty(); });
+
+    // 编辑光标 / 选区所在 run 的样式：在粗体文本中时加粗按钮选中。
+    editor_->OnActiveStylesChanged([this](const dui::richtext::InlineStyleState& s)
+    {
+        SetBoldButtonActive(s.bold == dui::richtext::StyleState::On);
+    });
 
     ApplyLayout();
 }
@@ -215,6 +223,12 @@ void Detail::LoadDoc(int64_t detailId)
 void Detail::MarkDirty()
 {
     dirty_ = true;
+}
+
+void Detail::SetBoldButtonActive(bool active)
+{
+    if (boldBtn_ != nullptr)
+        boldBtn_->SetState(dui::State::Selected, active);
 }
 
 void Detail::Flush()

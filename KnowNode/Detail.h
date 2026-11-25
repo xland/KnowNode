@@ -53,6 +53,7 @@ private:
     void InsertImageFile();
     void MarkDirty();
     void LoadDoc(int64_t detailId);
+    void SetBoldButtonActive(bool active);
 
     dui::Panel* handle_ = nullptr;
     dui::Text* arrow_ = nullptr;   // 字体图标：展开/收起时切换左右箭头码位
@@ -64,6 +65,7 @@ private:
     dui::Text* dirLabels_[3] = {};             // 三个单选项的文字
     dui::Scroller* scroller_ = nullptr;
     dui::RichEditor* editor_ = nullptr;
+    dui::Panel* boldBtn_ = nullptr;                // 工具栏加粗按钮（按编辑光标 / 选区样式高亮）
 
     Kind kind_ = Kind::None;
     int64_t detailId_ = 0;

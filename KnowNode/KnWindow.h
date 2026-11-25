@@ -34,7 +34,6 @@ private:
     void CreateNewKnowledgeButton();
     void ShowNewKnowledgeWindow();
     void BuildDialogOverlay(dui::Panel* root);
-    void ShowMenuAtClient(const dui::Menu& menu, dui::Vec2 clientPosDip);
     void ApplyPanelWidths();
     void SavePanelWidths();
 

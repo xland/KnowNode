@@ -85,17 +85,6 @@ void KnWindow::SavePanelWidths()
     db::Setting::instance().set("know_detail.width", std::to_string(static_cast<int>(detail_->Width() + 0.5f)));
 }
 
-void KnWindow::ShowMenuAtClient(const dui::Menu& menu, dui::Vec2 clientPosDip)
-{
-    POINT pt{
-        static_cast<LONG>(clientPosDip.x * Scale() + 0.5f),
-        static_cast<LONG>(clientPosDip.y * Scale() + 0.5f)
-    };
-    ClientToScreen(NativeHandle(), &pt);
-    dui::ShowPopupMenu(menu, NativeHandle(),
-                       dui::Vec2{ static_cast<float>(pt.x), static_cast<float>(pt.y) });
-}
-
 void KnWindow::BuildUi()
 {
     Root()->SetStyle(dui::Style()
@@ -122,7 +111,7 @@ void KnWindow::BuildUi()
     });
     category_->SetMenuPopup([this](const dui::Menu& menu, dui::Vec2 pos)
     {
-        ShowMenuAtClient(menu, pos);
+        ShowMenu(menu, pos);
     });
 
     auto splitterStyle = [] {
@@ -183,7 +172,7 @@ void KnWindow::BuildUi()
     });
     canvas_->SetMenuPopup([this](const dui::Menu& menu, dui::Vec2 pos)
     {
-        ShowMenuAtClient(menu, pos);
+        ShowMenu(menu, pos);
     });
 
     detail_ = body->AddChild<Detail>();
