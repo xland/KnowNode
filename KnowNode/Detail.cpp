@@ -9,24 +9,11 @@ namespace
     namespace rt = dui::richtext;
 
     constexpr float kSplitterWidth = 4.f;
-    constexpr float kHandleWidth = 14.f;
 }
 
 Detail::Detail()
 {
     SetStyle(dui::Style().FlexDirection(dui::FlexDirection::Row).FlexShrink(0.f));
-
-    handle_ = AddChild<dui::Panel>(dui::Style()
-        .Width(kHandleWidth).FlexShrink(0.f)
-        .FlexDirection(dui::FlexDirection::Row)
-        .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
-        .Background(0xFFF1F2F4).Cursor(dui::Cursor::Hand));
-    handle_->When(dui::State::Hover, dui::Style().Background(0xFFE5E7EB));
-    // 默认折叠态 → 展开按钮（向左箭头）。收起/展开时由 ApplyLayout 切换码位。
-    arrow_ = IconFont::CreateIcon(handle_, IconFont::ArrowLeft, dui::Style()
-        .Width(14.f).Height(14.f).FontSize(13.f).Color(0xFF4C4F54)
-        .Cursor(dui::Cursor::Hand));
-    handle_->OnClick([this](dui::PointerEvent&) { Toggle(); });
 
     splitter_ = AddChild<Splitter>(dui::Style()
         .Width(kSplitterWidth).FlexShrink(0.f)
@@ -99,29 +86,34 @@ Detail::Detail()
     };
 
     // 行内格式（对当前选区切换，需先选中文字才生效）
-    boldBtn_ = iconTool(IconFont::Bold, [this] { if (editor_->ToggleBold()) MarkDirty(); });
-    iconTool(IconFont::Italic, [this] { if (editor_->ToggleItalic()) MarkDirty(); });
-    iconTool(IconFont::Underline, [this] { if (editor_->ToggleUnderline()) MarkDirty(); });
-    iconTool(IconFont::Strike, [this] { if (editor_->ToggleStrike()) MarkDirty(); });
-    // 块级：分割线 + 原有四项
+    auto idx = [](dui::richtext::InlineStyle style) { return static_cast<size_t>(style); };
+    inlineStyleBtns_[idx(dui::richtext::InlineStyle::Bold)] =
+        iconTool(IconFont::Bold, [this] { if (editor_->ToggleBold()) MarkDirty(); });
+    inlineStyleBtns_[idx(dui::richtext::InlineStyle::Italic)] =
+        iconTool(IconFont::Italic, [this] { if (editor_->ToggleItalic()) MarkDirty(); });
+    inlineStyleBtns_[idx(dui::richtext::InlineStyle::Underline)] =
+        iconTool(IconFont::Underline, [this] { if (editor_->ToggleUnderline()) MarkDirty(); });
+    inlineStyleBtns_[idx(dui::richtext::InlineStyle::Strike)] =
+        iconTool(IconFont::Strike, [this] { if (editor_->ToggleStrike()) MarkDirty(); });
+    // 块级：分割线 / 无序列表 / 引用 / 图片
     iconTool(IconFont::HorizonLine, [this] { AppendBlock(rt::BlockKind::Rule); });
-    iconTool(IconFont::ListBullet, [this] { AppendBlock(rt::BlockKind::List); });
+    iconTool(IconFont::ListBullet, [this] { if (editor_->MakeList()) MarkDirty(); });
     iconTool(IconFont::Quote, [this] { AppendBlock(rt::BlockKind::Quote); });
-    iconTool(IconFont::Code, [this] { AppendBlock(rt::BlockKind::Code); });
     iconTool(IconFont::Image, [this] { InsertImageFile(); });
 
     scroller_ = panel_->AddChild<dui::Scroller>(dui::Style().FlexGrow(1.f));
     editor_ = scroller_->AddChild<dui::RichEditor>(dui::Style()
-        .FlexGrow(1.f).Padding(dui::Thickness(8.f)).Background(0xFFFFFFFF));
+        .FlexGrow(1.f).Padding(dui::Thickness(8.f)).Background(0xFFFFFFFF)
+        .LineHeight(1.1f));
     editor_->OnKeyDown([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnChar([this](dui::KeyEvent&) { MarkDirty(); });
     editor_->OnPointerUp([this](dui::PointerEvent&) { MarkDirty(); });
     editor_->OnDropFiles([this](dui::DropFilesEvent&) { MarkDirty(); });
 
-    // 编辑光标 / 选区所在 run 的样式：在粗体文本中时加粗按钮选中。
+    // 编辑光标 / 选区所在 run 的样式：对应格式按钮选中。
     editor_->OnActiveStylesChanged([this](const dui::richtext::InlineStyleState& s)
     {
-        SetBoldButtonActive(s.bold == dui::richtext::StyleState::On);
+        UpdateInlineStyleButtons(s);
     });
 
     ApplyLayout();
@@ -146,6 +138,9 @@ void Detail::Show(Kind kind, int64_t detailId, int64_t entityId, const dui::Stri
     editor_->SetEditable(detailId != 0);
     lastSavedJson_ = RichDocStore::Save(doc_);
     dirty_ = false;
+    ApplyLayout();
+    // 面板随内容显隐、占位变化 → 外层三栏要重排。
+    if (onResize_) onResize_();
 }
 
 void Detail::ShowDirection(int64_t lineId, int direction)
@@ -179,12 +174,22 @@ void Detail::SetDirection(int direction, bool notify)
 
 void Detail::Clear()
 {
+    if (kind_ == Kind::None) return;   // 已经是空状态，别重复清
     CommitTitle();
+    Flush();
     kind_ = Kind::None;
     detailId_ = 0;
     entityId_ = 0;
     dirLineId_ = 0;
+    title_->SetText(L"");
+    lastTitle_.clear();
     dirBar_->SetStyle(dui::Style().Display(dui::Display::None));
+    RichDocStore::Load(std::string(), doc_);   // 编辑器内容一并清空
+    editor_->SetDoc(doc_);
+    lastSavedJson_ = RichDocStore::Save(doc_);
+    dirty_ = false;
+    ApplyLayout();
+    if (onResize_) onResize_();
 }
 
 void Detail::CommitTitle()
@@ -225,10 +230,20 @@ void Detail::MarkDirty()
     dirty_ = true;
 }
 
-void Detail::SetBoldButtonActive(bool active)
+void Detail::UpdateInlineStyleButtons(const dui::richtext::InlineStyleState& state)
 {
-    if (boldBtn_ != nullptr)
-        boldBtn_->SetState(dui::State::Selected, active);
+    using dui::richtext::InlineStyle;
+    using dui::richtext::StyleState;
+    auto set = [this](InlineStyle style, StyleState value)
+    {
+        dui::Panel* btn = inlineStyleBtns_[static_cast<size_t>(style)];
+        if (btn != nullptr)
+            btn->SetState(dui::State::Selected, value == StyleState::On);
+    };
+    set(InlineStyle::Bold, state.bold);
+    set(InlineStyle::Italic, state.italic);
+    set(InlineStyle::Underline, state.underline);
+    set(InlineStyle::Strike, state.strike);
 }
 
 void Detail::Flush()
@@ -257,20 +272,6 @@ void Detail::AppendBlock(rt::BlockKind kind)
         block.level = 2;
         block.runs.push_back(rt::Run{ L"标题", {} });
         break;
-    case rt::BlockKind::List:
-    {
-        block.kind = rt::BlockKind::List;
-        block.listType = rt::ListType::Unordered;
-        rt::Block item;
-        item.kind = rt::BlockKind::ListItem;
-        item.runs.push_back(rt::Run{ L"", {} });
-        block.children.push_back(std::move(item));
-        break;
-    }
-    case rt::BlockKind::Code:
-        block.kind = rt::BlockKind::Code;
-        block.showLineNumbers = true;
-        break;
     case rt::BlockKind::Quote:
         block.kind = rt::BlockKind::Quote;
         block.runs.push_back(rt::Run{ L"", {} });
@@ -297,27 +298,6 @@ void Detail::InsertImageFile()
     if (pickImage_ && pickImage_(path) && editor_->InsertImage(path)) MarkDirty();
 }
 
-void Detail::Toggle()
-{
-    if (!hasKnowledge_) return;
-    if (expanded_) Flush();
-    expanded_ = !expanded_;
-    ApplyLayout();
-    if (onToggle_) onToggle_();
-}
-
-void Detail::SetExpanded(bool expanded)
-{
-    expanded_ = expanded;
-    ApplyLayout();
-}
-
-void Detail::SetHasKnowledge(bool has)
-{
-    hasKnowledge_ = has;
-    ApplyLayout();
-}
-
 void Detail::SetWidth(float width)
 {
     width_ = width;
@@ -326,11 +306,10 @@ void Detail::SetWidth(float width)
 
 void Detail::ApplyLayout()
 {
-    handle_->Set(dui::Prop::Width, hasKnowledge_ ? kHandleWidth : 0.f);
-    handle_->Set(dui::Prop::Visible, hasKnowledge_ ? 1u : 0u);
-    IconFont::SetGlyph(arrow_, expanded_ ? IconFont::ArrowRight : IconFont::ArrowLeft);
-    splitter_->Set(dui::Prop::Width, expanded_ ? kSplitterWidth : 0.f);
-    splitter_->Set(dui::Prop::Visible, expanded_ ? 1u : 0u);
-    panel_->Set(dui::Prop::Width, expanded_ ? width_ : 0.f);
-    panel_->Set(dui::Prop::Visible, expanded_ ? 1u : 0u);
+    // 面板随内容显隐：选中节点/连线时展开，否则收起且不占位。
+    const bool visible = HasContent();
+    splitter_->Set(dui::Prop::Width, visible ? kSplitterWidth : 0.f);
+    splitter_->Set(dui::Prop::Visible, visible ? 1u : 0u);
+    panel_->Set(dui::Prop::Width, visible ? width_ : 0.f);
+    panel_->Set(dui::Prop::Visible, visible ? 1u : 0u);
 }

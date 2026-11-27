@@ -37,6 +37,7 @@ public:
     void RequestCenter();   // 加载/切换知识后：下一帧把所有节点居中（普通 Refresh 不触发）
     void SetSearch(const dui::String& text);
     void ResetView();
+    void ClearSelection();   // 取消节点/连线选中，供画布外点击调用
 
     using ContextMenuFn = std::function<void(dui::Vec2 pos, int64_t nodeId,
                                              int64_t lineId, double modelX, double modelY)>;

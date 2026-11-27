@@ -28,7 +28,6 @@ void KnowList::create(sqlite3* conn)
         "CREATE TABLE IF NOT EXISTS know_list ("
         "    id         INTEGER PRIMARY KEY AUTOINCREMENT,"
         "    name       TEXT    NOT NULL,"
-        "    detail_id  INTEGER NOT NULL REFERENCES know_detail(id),"
         "    created_at INTEGER NOT NULL,"
         "    updated_at INTEGER NOT NULL"
         ");";
@@ -37,18 +36,13 @@ void KnowList::create(sqlite3* conn)
 
 int64_t KnowList::add(const std::string& name)
 {
-    // 知识自己也有一份详情（整体描述），先建详情拿到 id，这条记录再指向它
-    auto detailId = KnowDetail::instance().add();
-    if (detailId == 0) return 0;
-
     auto now = Util::nowMillis();
     sqlite3* conn = Db::instance().conn();
-    DbStmt stmt{ conn, "INSERT INTO know_list (name, detail_id, created_at, updated_at) VALUES (?, ?, ?, ?);" };
+    DbStmt stmt{ conn, "INSERT INTO know_list (name, created_at, updated_at) VALUES (?, ?, ?);" };
     if (!stmt.ok()) return 0;
     stmt.bindText(1, name);
-    stmt.bindInt(2, detailId);
+    stmt.bindInt(2, now);
     stmt.bindInt(3, now);
-    stmt.bindInt(4, now);
     stmt.run();
     const int64_t listId = sqlite3_last_insert_rowid(conn);
     if (listId == 0) return 0;
@@ -78,11 +72,7 @@ bool KnowList::remove(int64_t id)
 
     // 删知识会级联删掉它的节点、连线，但那些节点/连线各自的 know_detail 行不会自动跟着走
     // （外键是它们指向 detail，不是反过来），所以先记下要清理的 detail id。
-    // 知识自己那份详情也在其中——它同样是指向 detail 的一方
     std::vector<int64_t> detailIds;
-    DbStmt self{ conn, "SELECT detail_id FROM know_list WHERE id = ?;" };
-    self.bindInt(1, id);
-    while (self.step()) detailIds.push_back(self.columnInt(0));
 
     DbStmt nodes{ conn, "SELECT detail_id FROM know_node WHERE list_id = ?;" };
     nodes.bindInt(1, id);
@@ -109,16 +99,15 @@ std::vector<KnowListItem> KnowList::all() const
 {
     std::vector<KnowListItem> items;
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, name, detail_id, created_at, updated_at FROM know_list ORDER BY created_at, id;" };
+        "SELECT id, name, created_at, updated_at FROM know_list ORDER BY created_at, id;" };
     if (!stmt.ok()) return items;
     while (stmt.step())
     {
         KnowListItem item;
         item.id = stmt.columnInt(0);
         item.name = stmt.columnText(1);
-        item.detailId = stmt.columnInt(2);
-        item.createdAt = stmt.columnInt(3);
-        item.updatedAt = stmt.columnInt(4);
+        item.createdAt = stmt.columnInt(2);
+        item.updatedAt = stmt.columnInt(3);
         items.push_back(std::move(item));
     }
     return items;
@@ -127,15 +116,14 @@ std::vector<KnowListItem> KnowList::all() const
 bool KnowList::get(int64_t id, KnowListItem& out) const
 {
     DbStmt stmt{ Db::instance().conn(),
-        "SELECT id, name, detail_id, created_at, updated_at FROM know_list WHERE id = ?;" };
+        "SELECT id, name, created_at, updated_at FROM know_list WHERE id = ?;" };
     if (!stmt.ok()) return false;
     stmt.bindInt(1, id);
     if (!stmt.step()) return false;
     out.id = stmt.columnInt(0);
     out.name = stmt.columnText(1);
-    out.detailId = stmt.columnInt(2);
-    out.createdAt = stmt.columnInt(3);
-    out.updatedAt = stmt.columnInt(4);
+    out.createdAt = stmt.columnInt(2);
+    out.updatedAt = stmt.columnInt(3);
     return true;
 }
 

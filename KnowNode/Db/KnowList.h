@@ -10,14 +10,13 @@ namespace db {
  * know_list 表：一个个「知识」（历史知识、编程知识、文学知识……），
  * 每一项是一张网的入口。
  *
- * 知识自己也有一份详情（`detail_id` → know_detail），写的是这个知识**整体的描述**
- * （与节点 / 连线的详情同一张表、同一套读写，见 Arch/40）。
+ * 知识**本身没有详情**：详情只属于节点与连线（见 KnowDetail），
+ * 想给一个知识写整体描述就建一个节点。
  */
 struct KnowListItem
 {
     int64_t id = 0;
     std::string name;
-    int64_t detailId = 0;
     int64_t createdAt = 0;
     int64_t updatedAt = 0;
 };

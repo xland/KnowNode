@@ -732,6 +732,16 @@ bool GraphView::SelectLine(int64_t lineId)
     return false;
 }
 
+void GraphView::ClearSelection()
+{
+    if (selectedNode_ == 0 && selectedLine_ == 0) return;
+    selectedNode_ = 0;
+    selectedLine_ = 0;
+    if (select_) select_(0, 0);
+    RefreshElements();
+    InvalidatePaint();
+}
+
 bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
 {
     const dui::Vec2 local = ToLocal(ev.pos);
@@ -743,7 +753,7 @@ bool GraphView::HandlePointerDown(dui::PointerEvent& ev)
         const int li = ni < 0 ? HitLine(local) : -1;
         const dui::Vec2 model = ToModel(local);
         if (contextMenu_)
-            contextMenu_(ev.pos,
+            contextMenu_(dui::LocalToClient(ev.source, ev.pos),
                          ni >= 0 ? nodes_[ni].id : 0,
                          li >= 0 ? lines_[li].id : 0,
                          model.x, model.y);

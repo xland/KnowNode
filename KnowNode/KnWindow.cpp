@@ -7,14 +7,14 @@
 #include "Db/KnowList.h"
 #include "Db/KnowNode.h"
 #include "Db/Setting.h"
+#include "ImageAssetStore.h"
 
 namespace
 {
     constexpr float kListMin = 220.f;
     constexpr float kDetailMin = 300.f;
-    constexpr float kCanvasMin = 500.f;
+    constexpr float kCanvasMin = 300.f;      // 详情按设定宽度占位，画布是被挤压的一方
     constexpr float kSplitterWidth = 4.f;    // splitter 命中区宽度（同老项目 .splitter）
-    constexpr float kHandleWidth = 14.f;
 
     float LoadWidth(const char* key, float fallback, float minWidth)
     {
@@ -54,22 +54,24 @@ void KnWindow::OnStateChanged()
     titleBar_->SyncMaximizeState();
 }
 
+void KnWindow::OnDeactivated()
+{
+    canvas_->ClearGraphSelection();   // 切到别的应用/窗口后取消节点选中
+}
+
 void KnWindow::ApplyPanelWidths()
 {
-    // avail = 列表 + 画布 + 详情（splitter 与手柄已从窗口宽度中扣除）。
+    // avail = 列表 + 画布 + 详情（splitter 已从窗口宽度中扣除）。
     const float bodyWidth = ClientSizeDip().x;
-    const bool hasKnowledge = currentListId_ != 0;
-    const bool expanded = hasKnowledge && detail_->IsExpanded();
-    // 空白页时详情整体不显示，它的手柄/分隔条也不占位。
-    const float fixed = kSplitterWidth + (hasKnowledge ? kHandleWidth : 0.f)
-        + (expanded ? kSplitterWidth : 0.f);
+    const bool hasDetail = detail_->HasContent();
+    const float fixed = kSplitterWidth + (hasDetail ? kSplitterWidth : 0.f);
     const float avail = bodyWidth - fixed;
-    const float detailNow = expanded ? detail_->Width() : 0.f;
+    const float detailNow = hasDetail ? detail_->Width() : 0.f;
 
     // 优先保列表与详情最小值；画布/空白页不足时按老项目规则牺牲它。
     listWidth_ = std::clamp(listWidth_, kListMin,
         std::max(kListMin, avail - kCanvasMin - detailNow));
-    if (expanded)
+    if (hasDetail)
     {
         detail_->SetWidth(std::clamp(detail_->Width(), kDetailMin,
             std::max(kDetailMin, avail - listWidth_ - kCanvasMin)));
@@ -99,16 +101,8 @@ void KnWindow::BuildUi()
 
     category_ = body->AddChild<KnowList>(dui::Style().Width(listWidth_));
     category_->OnSelect([this](int64_t id) { OpenList(id); });
-    category_->OnRenamed([this](int64_t id, const dui::String& name)
-    {
-        if (detail_->CurrentKind() == Detail::Kind::List && currentListId_ == id)
-            detail_->SetTitle(name);
-    });
-    category_->SetTextDialog([this](const dui::String& prompt, const dui::String& initial,
-                                    std::function<void(const dui::String&)> callback)
-    {
-        ShowTextDialog(prompt, initial, std::move(callback));
-    });
+    category_->OnAddRequest([this] { ShowNewKnowledgeWindow(); });
+    category_->OnRenameRequest([this](int64_t id) { ShowRenameKnowledgeWindow(id); });
     category_->SetMenuPopup([this](const dui::Menu& menu, dui::Vec2 pos)
     {
         ShowMenu(menu, pos);
@@ -157,18 +151,12 @@ void KnWindow::BuildUi()
     });
     canvas_->OnDeleted([this]
     {
-        detail_->Flush();
-        detail_->Clear();
+        detail_->Clear();      // 内部会落盘：被删对象的最后几笔编辑不丢
         OpenList(currentListId_);
     });
     canvas_->OnNodeCount([this](size_t count)
     {
         statusBar_->SetNodeCount(count);
-    });
-    canvas_->SetTextDialog([this](const dui::String& prompt, const dui::String& initial,
-                                  std::function<void(const dui::String&)> callback)
-    {
-        ShowTextDialog(prompt, initial, std::move(callback));
     });
     canvas_->SetMenuPopup([this](const dui::Menu& menu, dui::Vec2 pos)
     {
@@ -185,7 +173,6 @@ void KnWindow::BuildUi()
         if (kind == Detail::Kind::Node) canvas_->RenameNodeById(entityId, text);
         else if (kind == Detail::Kind::Line) canvas_->RenameLineById(entityId, text);
     });
-    detail_->OnToggle([this] { ApplyPanelWidths(); });
     detail_->OnResize([this] { ApplyPanelWidths(); });
     detail_->OnWidthCommitted([this] { SavePanelWidths(); });
     detail_->SetPickImage([this](dui::String& path)
@@ -201,6 +188,11 @@ void KnWindow::BuildUi()
         path = result.Value().front();
         return true;
     });
+    // 所有图片（选择 / 粘贴 / 拖放）统一落到数据目录 imgs，文档只保存 file:// URI。
+    detail_->SetImageSrcMapper([](const dui::String& src)
+    {
+        return ImageAssetStore::Save(src);
+    });
 
     // 未选中任何知识时的空白页：占满画布+详情区域。按钮仅在空白页时动态创建。
     blank_ = body->AddChild<dui::Panel>(dui::Style()
@@ -209,57 +201,6 @@ void KnWindow::BuildUi()
         .Background(0xFFF7F8FA));
 
     statusBar_ = Root()->AddChild<StatusBar>();
-
-    BuildDialogOverlay(Root());
-}
-
-void KnWindow::BuildDialogOverlay(dui::Panel* root)
-{
-    dialogOverlay_ = root->AddChild<dui::Panel>(dui::Style()
-        .Position(dui::Position::Absolute)
-        .Left(0.f).Top(0.f).Right(0.f).Bottom(0.f).ZIndex(100)
-        .FlexDirection(dui::FlexDirection::Column)
-        .JustifyContent(dui::Justify::Center).AlignItems(dui::Align::Center)
-        .Background(0x88000000).AppRegion(dui::AppRegion::NoDrag));
-    dialogOverlay_->OnPointerDown([](dui::PointerEvent& e) { e.handled = true; });
-
-    auto* card = dialogOverlay_->AddChild<dui::Panel>(dui::Style()
-        .Width(340.f).Height(156.f).Padding(16.f)
-        .FlexDirection(dui::FlexDirection::Column).Gap(10.f)
-        .Background(0xFFFFFFFF).CornerRadius(8.f)
-        .AppRegion(dui::AppRegion::NoDrag));
-
-    dialogPrompt_ = card->AddChild<dui::Text>(L"", dui::Style()
-        .FontSize(14.f).Color(0xFF111827));
-
-    dialogInput_ = card->AddChild<dui::TextBox>(dui::Style()
-        .Height(32.f).Width(306.f)
-        .BorderWidth(1.f).BorderColor(0xFFD1D5DB).CornerRadius(4.f)
-        .Padding(dui::Thickness(0.f, 8.f)).FontSize(14.f));
-    dialogInput_->OnSubmit([this]
-    {
-        if (dialogCallback_) dialogCallback_(dialogInput_->GetText());
-        HideTextDialog();
-    });
-
-    auto* row = card->AddChild<dui::Panel>(dui::Style()
-        .FlexDirection(dui::FlexDirection::Row).JustifyContent(dui::Justify::End)
-        .Gap(8.f));
-    auto* cancel = row->AddChild<dui::Button>(L"取消", dui::Style()
-        .Padding(dui::Thickness(6.f, 12.f)).Color(0xFF4B5563)
-        .CornerRadius(4.f).Cursor(dui::Cursor::Hand));
-    cancel->OnClick([this](dui::PointerEvent&) { HideTextDialog(); });
-
-    auto* ok = row->AddChild<dui::Button>(L"确定", dui::Style()
-        .Padding(dui::Thickness(6.f, 12.f)).Color(0xFFFFFFFF)
-        .Background(0xFF2563EB).CornerRadius(4.f).Cursor(dui::Cursor::Hand));
-    ok->OnClick([this](dui::PointerEvent&)
-    {
-        if (dialogCallback_) dialogCallback_(dialogInput_->GetText());
-        HideTextDialog();
-    });
-
-    dialogOverlay_->Set(dui::Prop::Visible, 0u);
 }
 
 void KnWindow::CreateNewKnowledgeButton()
@@ -275,12 +216,24 @@ void KnWindow::CreateNewKnowledgeButton()
 
 void KnWindow::ShowNewKnowledgeWindow()
 {
+    ShowKnowledgeWindow(0, L"");
+}
+
+void KnWindow::ShowRenameKnowledgeWindow(int64_t listId)
+{
+    db::KnowListItem item;
+    if (!db::KnowList::instance().get(listId, item)) return;
+    ShowKnowledgeWindow(listId, dui::Utf8ToWide(item.name.c_str()));
+}
+
+void KnWindow::ShowKnowledgeWindow(int64_t listId, const dui::String& initial)
+{
     if (newKnowledge_ != nullptr) return;   // 已打开，不重复创建
     dui::Lifetime life = category_->Lifetime();
-    newKnowledge_ = std::make_unique<KnowNew>([this, life](int64_t listId)
+    newKnowledge_ = std::make_unique<KnowNew>([this, life](int64_t id)
     {
-        if (listId != 0) OpenList(listId);
-    });
+        if (id != 0) OpenList(id);
+    }, listId, initial);
     newKnowledge_->SetClosed([life, this]
     {
         dui::PostUi(life, [this] { newKnowledge_.reset(); });   // 脱离 OnClosing 栈后释放
@@ -316,23 +269,20 @@ void KnWindow::OpenList(int64_t listId)
 
     if (!hasKnowledge)
     {
-        // 进入空白页前先保存当前详情，再清掉，避免残留旧知识内容。
-        detail_->Flush();
+        // 进入空白页：清掉当前详情，避免残留旧知识内容。
         detail_->Clear();
-        detail_->SetHasKnowledge(false);
         category_->SetSelected(0);
         statusBar_->SetNodeCount(0);
         ApplyPanelWidths();
         return;
     }
 
-    detail_->SetHasKnowledge(true);
     category_->SetSelected(listId);
     canvas_->SetList(listId);
 
-    db::KnowListItem item;
-    if (db::KnowList::instance().get(listId, item))
-        detail_->Show(Detail::Kind::List, item.detailId, 0, dui::Utf8ToWide(item.name.c_str()));
+    // 知识本身没有详情：切换知识后详情面板回到「无内容」状态（收起、不占宽度）。
+    // Clear 内部会落盘并提交标题，上一份内容的最后几笔编辑不会丢。
+    detail_->Clear();
     ApplyPanelWidths();
 }
 
@@ -374,30 +324,10 @@ void KnWindow::SelectGraphItem(int64_t nodeId, int64_t lineId)
         return;
     }
 
-    db::KnowListItem item;
-    if (db::KnowList::instance().get(currentListId_, item))
-        detail_->Show(Detail::Kind::List, item.detailId, 0, dui::Utf8ToWide(item.name.c_str()));
+    // 点画布空白：没有选中任何对象 → 详情面板收起。
+    detail_->Clear();
     selectedNodeDetailId_ = 0;
     selectedLineDetailId_ = 0;
     dui::Emit(kStatusSelectionEvent, StatusSelectionEvent{});   // 点空白取消选中
 }
-
-void KnWindow::ShowTextDialog(const dui::String& prompt, const dui::String& initial,
-                              std::function<void(const dui::String&)> callback)
-{
-    dialogPrompt_->SetText(prompt);
-    dialogInput_->SetText(initial);
-    dialogCallback_ = std::move(callback);
-    dialogOverlay_->Set(dui::Prop::Visible, 1u);
-    dialogInput_->Focus();
-    dialogInput_->SelectAll();
-}
-
-void KnWindow::HideTextDialog()
-{
-    dialogInput_->Blur();
-    dialogCallback_ = nullptr;
-    dialogOverlay_->Set(dui::Prop::Visible, 0u);
-}
-
 

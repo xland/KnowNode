@@ -90,7 +90,11 @@ Canvas::Canvas()
         .Cursor(dui::Cursor::Hand));
     IconFont::CreateIcon(center, IconFont::Center, dui::Style()
         .Width(18.f).Height(18.f).FontSize(16.f).Color(0xFF6B7280));
-    center->OnClick([this](dui::PointerEvent&) { graph_->ResetView(); });
+    center->OnClick([this](dui::PointerEvent&)
+    {
+        graph_->ResetView();
+        graph_->Focus();   // 焦点回到画布，Tab 才能以选中节点新建关联节点
+    });
 }
 
 void Canvas::SetList(int64_t listId)
@@ -137,7 +141,6 @@ void Canvas::ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double
     dui::Menu menu;
     if (nodeId != 0)
     {
-        menu.Add(L"重命名", [this, nodeId] { RenameNode(nodeId); });
         menu.Add(L"新建关联节点", [this, nodeId] { CreateRelatedNode(nodeId); });
 
         dui::Menu colors;
@@ -149,7 +152,6 @@ void Canvas::ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double
     }
     else if (lineId != 0)
     {
-        menu.Add(L"重命名", [this, lineId] { RenameLine(lineId); });
         dui::Menu colors;
         for (int i = 0; i <= 5; ++i)
             colors.Add(ColorName(i), [this, nodeId, lineId, i] { SetGraphColor(nodeId, lineId, i); });
@@ -164,34 +166,6 @@ void Canvas::ShowGraphMenu(dui::Vec2 pos, int64_t nodeId, int64_t lineId, double
     menuPopup_(menu, pos);
 }
 
-void Canvas::RenameNode(int64_t nodeId)
-{
-    db::KnowNodeItem item;
-    if (!db::KnowNode::instance().get(nodeId, item)) return;
-    const int64_t oldDetail = item.detailId;
-    textDialog_(L"节点标题", dui::Utf8ToWide(item.title.c_str()), [this, nodeId, oldDetail](const dui::String& text)
-    {
-        if (text.empty() || text.size() > 36) return;
-        db::KnowNode::instance().updateTitle(nodeId, dui::WideToUtf8(text));
-        Refresh();
-        if (onDetailTitle_) onDetailTitle_(oldDetail, text);
-    });
-}
-
-void Canvas::RenameLine(int64_t lineId)
-{
-    db::KnowLineItem item;
-    if (!db::KnowLine::instance().get(lineId, item)) return;
-    const int64_t oldDetail = item.detailId;
-    textDialog_(L"连线标题", dui::Utf8ToWide(item.title.c_str()), [this, lineId, oldDetail](const dui::String& text)
-    {
-        if (text.empty() || text.size() > 36) return;
-        db::KnowLine::instance().updateTitle(lineId, dui::WideToUtf8(text));
-        Refresh();
-        if (onLineDetailTitle_) onLineDetailTitle_(oldDetail, text);
-    });
-}
-
 void Canvas::SetGraphColor(int64_t nodeId, int64_t lineId, int color)
 {
     if (nodeId != 0) db::KnowNode::instance().setColor(nodeId, color);
@@ -204,6 +178,11 @@ void Canvas::SetLineDirection(int64_t lineId, int direction)
     if (lineId == 0) return;
     db::KnowLine::instance().setDirection(lineId, direction);
     graph_->UpdateLineDirection(lineId, direction);   // 原地刷新，不重置选中/视图
+}
+
+void Canvas::ClearGraphSelection()
+{
+    graph_->ClearSelection();
 }
 
 void Canvas::RenameNodeById(int64_t nodeId, const dui::String& text)

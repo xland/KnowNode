@@ -93,6 +93,7 @@
     <ClCompile Include="GraphNodeAddBtn.cpp" />
     <ClCompile Include="GraphLineTitle.cpp" />
     <ClCompile Include="IconFont.cpp" />
+    <ClCompile Include="ImageAssetStore.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RichDocStore.cpp" />
     <ClCompile Include="SQLite\sqlite3.c" />
@@ -120,6 +121,7 @@
     <ClInclude Include="GraphNodeAddBtn.h" />
     <ClInclude Include="GraphLineTitle.h" />
     <ClInclude Include="IconFont.h" />
+    <ClInclude Include="ImageAssetStore.h" />
     <ClInclude Include="RichDocStore.h" />
     <ClInclude Include="SQLite\sqlite3.h" />
     <ClInclude Include="Util.h" />

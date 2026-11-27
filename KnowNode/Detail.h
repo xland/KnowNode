@@ -5,36 +5,43 @@
 #include "DUI/DUI.h"
 #include "Splitter.h"
 
-// 右侧详情面板：封装展开手柄、可拖拽分隔条、标题/工具栏/富文本编辑器，
+// 右侧详情面板：封装可拖拽分隔条、标题/工具栏/富文本编辑器，
 // 以及文档内容的加载、编辑与保存。与窗口的布局联动通过回调注入。
+//
+// 面板只服务「节点」与「连线」两种对象（整篇知识没有自己的详情）；
+// 面板随选中显隐：选中即展开，没选中则收起。
 class Detail final : public dui::Panel
 {
 public:
-    enum class Kind { None, List, Node, Line };
+    enum class Kind { None, Node, Line };
 
     Detail();
 
-    // entityId：节点 id / 连线 id（Kind::List 传 0），标题提交时用于写库。
+    // entityId：节点 id / 连线 id，标题提交时用于写库。
     // 切换实体会先提交当前标题，再更新 detailId_/entityId_。
     void Show(Kind kind, int64_t detailId, int64_t entityId, const dui::String& title);
+    // 清空内容：落盘当前编辑 → 丢掉当前对象 → 面板收起。
     void Clear();
     void Flush();
 
     Kind CurrentKind() const { return kind_; }
+    /// 当前有没有内容可显示（选中了节点或连线）
+    bool HasContent() const { return kind_ != Kind::None; }
     void SetTitle(const dui::String& title);
     void UpdateTitleIf(Kind kind, int64_t detailId, const dui::String& title);
 
-    void SetExpanded(bool expanded);
-    bool IsExpanded() const { return expanded_; }
-    void SetHasKnowledge(bool has);
     void SetWidth(float width);
     float Width() const { return width_; }
     void ApplyLayout();
 
-    void OnToggle(std::function<void()> fn) { onToggle_ = std::move(fn); }
+    /// 面板占位变了（拖分隔条、内容切换导致显隐）→ 外层重排三栏
     void OnResize(std::function<void()> fn) { onResize_ = std::move(fn); }
     void OnWidthCommitted(std::function<void()> fn) { onWidthCommitted_ = std::move(fn); }
     void SetPickImage(std::function<bool(dui::String&)> fn) { pickImage_ = std::move(fn); }
+    void SetImageSrcMapper(dui::RichEditor::ImageSrcMapper fn)
+    {
+        editor_->SetImageSrcMapper(std::move(fn));
+    }
     /// 连线箭头方向变更：回调参数为 (lineId, direction: 0=A→B 1=B→A 2=双向)
     void OnLineDirection(std::function<void(int64_t, int)> fn) { onLineDirection_ = std::move(fn); }
     /// 标题提交：回调参数为 (kind, entityId, text)，仅 Node/Line 触发
@@ -48,15 +55,12 @@ public:
 private:
     void CommitTitle();
     void SetDirection(int direction, bool notify = true);
-    void Toggle();
     void AppendBlock(dui::richtext::BlockKind kind);
     void InsertImageFile();
     void MarkDirty();
     void LoadDoc(int64_t detailId);
-    void SetBoldButtonActive(bool active);
+    void UpdateInlineStyleButtons(const dui::richtext::InlineStyleState& state);
 
-    dui::Panel* handle_ = nullptr;
-    dui::Text* arrow_ = nullptr;   // 字体图标：展开/收起时切换左右箭头码位
     Splitter* splitter_ = nullptr;
     dui::Panel* panel_ = nullptr;
     dui::TextBox* title_ = nullptr;
@@ -65,7 +69,7 @@ private:
     dui::Text* dirLabels_[3] = {};             // 三个单选项的文字
     dui::Scroller* scroller_ = nullptr;
     dui::RichEditor* editor_ = nullptr;
-    dui::Panel* boldBtn_ = nullptr;                // 工具栏加粗按钮（按编辑光标 / 选区样式高亮）
+    dui::Panel* inlineStyleBtns_[4] = {};          // 粗体/斜体/下划线/删除线，按光标或选区样式高亮
 
     Kind kind_ = Kind::None;
     int64_t detailId_ = 0;
@@ -76,12 +80,9 @@ private:
     dui::richtext::RichDoc doc_;
     dui::String lastSavedJson_;
     bool dirty_ = false;
-    bool expanded_ = false;
-    bool hasKnowledge_ = false;
     float width_ = 600.f;
     float dragBase_ = 0.f;
 
-    std::function<void()> onToggle_;
     std::function<void()> onResize_;
     std::function<void()> onWidthCommitted_;
     std::function<bool(dui::String&)> pickImage_;

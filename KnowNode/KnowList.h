@@ -10,8 +10,6 @@
 class KnowList final : public dui::Panel
 {
 public:
-    using TextDialogFn = std::function<void(const dui::String&, const dui::String&,
-                                            std::function<void(const dui::String&)>)>;
     using MenuPopupFn = std::function<void(const dui::Menu&, dui::Vec2)>;
 
     KnowList();
@@ -21,8 +19,8 @@ public:
     void Refresh();
 
     void OnSelect(std::function<void(int64_t)> fn) { onSelect_ = std::move(fn); }
-    void OnRenamed(std::function<void(int64_t, const dui::String&)> fn) { onRenamed_ = std::move(fn); }
-    void SetTextDialog(TextDialogFn fn) { textDialog_ = std::move(fn); }
+    void OnAddRequest(std::function<void()> fn) { onAddRequest_ = std::move(fn); }
+    void OnRenameRequest(std::function<void(int64_t)> fn) { onRenameRequest_ = std::move(fn); }
     void SetMenuPopup(MenuPopupFn fn) { menuPopup_ = std::move(fn); }
 
 private:
@@ -33,7 +31,6 @@ private:
     };
 
     void Select(int64_t id);
-    void Rename(int64_t id);
     void Delete(int64_t id);
 
     dui::Panel* listBody_ = nullptr;
@@ -41,7 +38,7 @@ private:
     int64_t selectedId_ = 0;
 
     std::function<void(int64_t)> onSelect_;
-    std::function<void(int64_t, const dui::String&)> onRenamed_;
-    TextDialogFn textDialog_;
+    std::function<void()> onAddRequest_;
+    std::function<void(int64_t)> onRenameRequest_;
     MenuPopupFn menuPopup_;
 };

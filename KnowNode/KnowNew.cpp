@@ -3,11 +3,13 @@
 #include "Db/KnowList.h"
 #include "Util.h"
 
-KnowNew::KnowNew(DoneFn done) : dui::Window(dui::WindowOptions{
-    .title = L"新建知识",
-    .width = 380.f,
-    .height = 160.f,
-}), done_(std::move(done))
+KnowNew::KnowNew(DoneFn done, int64_t listId, const dui::String& initial)
+    : dui::Window(dui::WindowOptions{
+          .title = listId != 0 ? L"修改知识名称" : L"新建知识",
+          .width = 380.f,
+          .height = 120.f,
+      }),
+      listId_(listId), initial_(initial), done_(std::move(done))
 {
 }
 
@@ -17,11 +19,13 @@ void KnowNew::OnCreate()
     root->SetStyle(dui::Style()
         .FlexDirection(dui::FlexDirection::Column)
         .Padding(dui::Thickness(20.f, 18.f))
-        .Gap(14.f));
+        .Gap(14.f)
+        .Background(0xFFFFFFFF));
 
     input_ = root->AddChild<dui::TextBox>(dui::Style()
-        .Height(32.f).Padding(dui::Thickness(8.f, 0.f))
+        .Height(32.f).Padding(dui::Thickness(0.f, 8.f))
         .FontSize(14.f).Color(0xFF1F2329)
+        .Background(0xFFFFFFFF)
         .BorderWidth(1.f).BorderColor(0xFFD9DCE1).CornerRadius(4.f));
     input_->OnSubmit([this] { Confirm(); });
 
@@ -37,6 +41,7 @@ void KnowNew::OnCreate()
         .Background(0xFF2563EB).CornerRadius(4.f).Cursor(dui::Cursor::Hand));
     ok->OnClick([this](dui::PointerEvent&) { Confirm(); });
 
+    input_->SetText(initial_);
     input_->Focus();
     input_->SelectAll();
 }
@@ -45,7 +50,13 @@ void KnowNew::Confirm()
 {
     const dui::String name = input_->GetText();
     if (name.empty()) return;
-    resultId_ = db::KnowList::instance().add(dui::WideToUtf8(name));
+    if (listId_ != 0)
+    {
+        db::KnowList::instance().rename(listId_, dui::WideToUtf8(name));
+        resultId_ = listId_;
+    }
+    else
+        resultId_ = db::KnowList::instance().add(dui::WideToUtf8(name));
     Close();
 }
 

@@ -3,15 +3,6 @@
 #include "Db/KnowList.h"
 #include "IconFont.h"
 
-namespace
-{
-    dui::String ListName(int64_t id)
-    {
-        db::KnowListItem item;
-        return db::KnowList::instance().get(id, item) ? dui::Utf8ToWide(item.name.c_str()) : dui::String();
-    }
-}
-
 KnowList::KnowList()
 {
     SetStyle(dui::Style()
@@ -38,12 +29,7 @@ KnowList::KnowList()
         .Width(16.f).Height(16.f).FontSize(14.f).Color(0xFF4B5563));
     addList->OnClick([this](dui::PointerEvent&)
     {
-        textDialog_(L"知识名称", L"", [this](const dui::String& name)
-        {
-            if (name.empty()) return;
-            const int64_t id = db::KnowList::instance().add(dui::WideToUtf8(name));
-            if (id != 0) Select(id);
-        });
+        if (onAddRequest_) onAddRequest_();
     });
 
     auto* listScroller = AddChild<dui::Scroller>(dui::Style().FlexGrow(1.f));
@@ -92,9 +78,12 @@ void KnowList::Refresh()
         {
             if (e.button != dui::PointerButton::Right) return;
             dui::Menu menu;
-            menu.Add(L"修改知识名称", [this, id] { Rename(id); });
+            menu.Add(L"修改知识名称", [this, id]
+            {
+                if (onRenameRequest_) onRenameRequest_(id);
+            });
             menu.Add(L"删除知识", [this, id] { Delete(id); });
-            menuPopup_(menu, e.pos);
+            menuPopup_(menu, dui::LocalToClient(e.source, e.pos));
             e.handled = true;
         });
     }
@@ -105,17 +94,6 @@ void KnowList::Select(int64_t id)
     selectedId_ = id;
     Refresh();
     if (onSelect_) onSelect_(id);
-}
-
-void KnowList::Rename(int64_t id)
-{
-    textDialog_(L"知识名称", ListName(id), [this, id](const dui::String& text)
-    {
-        if (text.empty() || text.size() > 36) return;
-        db::KnowList::instance().rename(id, dui::WideToUtf8(text));
-        Refresh();
-        if (onRenamed_) onRenamed_(id, text);
-    });
 }
 
 void KnowList::Delete(int64_t id)

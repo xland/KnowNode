@@ -28,21 +28,19 @@ protected:
     void OnCreate() override;
     bool OnClosing() override;
     void OnStateChanged() override;
+    void OnDeactivated() override;
 
 private:
     void BuildUi();
     void CreateNewKnowledgeButton();
     void ShowNewKnowledgeWindow();
-    void BuildDialogOverlay(dui::Panel* root);
+    void ShowRenameKnowledgeWindow(int64_t listId);
+    void ShowKnowledgeWindow(int64_t listId, const dui::String& initial);
     void ApplyPanelWidths();
     void SavePanelWidths();
 
     void OpenList(int64_t listId);
     void SelectGraphItem(int64_t nodeId, int64_t lineId);
-
-    void ShowTextDialog(const dui::String& prompt, const dui::String& initial,
-                        std::function<void(const dui::String&)> callback);
-    void HideTextDialog();
 
     KnowList* category_ = nullptr;
     Canvas* canvas_ = nullptr;
@@ -56,11 +54,6 @@ private:
 
     float listWidth_ = 300.f;
     float dragBase_ = 0.f;
-
-    dui::Panel* dialogOverlay_ = nullptr;
-    dui::Text* dialogPrompt_ = nullptr;
-    dui::TextBox* dialogInput_ = nullptr;
-    std::function<void(const dui::String&)> dialogCallback_;
 
     int64_t currentListId_ = 0;
     int64_t selectedNodeDetailId_ = 0;   // 当前选中节点的详情 id（0 = 未选中节点）

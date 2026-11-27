@@ -9,8 +9,6 @@ class IconFont
 {
 public:
     // 图标码位（来自 iconfont.json）
-    static constexpr wchar_t ArrowLeft = 0xE709;    // 详情展开（向左）
-    static constexpr wchar_t ArrowRight = 0xE70E;   // 详情收起（向右）
     static constexpr wchar_t Center = 0xEB4E;       // 回到中心（取景框）
     static constexpr wchar_t Add = 0xE798;          // 新建知识
     static constexpr wchar_t Nodes = 0xE613;        // 节点（标题栏 logo）
