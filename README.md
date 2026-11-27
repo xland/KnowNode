@@ -1,56 +1,43 @@
 # KnowNode 知点
 
-**节点化个人知识管理工具（DUI 原生版）。**
+节点化个人知识管理工具。
 
-人脑海里的知识不是分门别类的目录树，而是一张网：最小单位是一个**知识节点**，节点与节点之间有**关联**。KnowNode 就是以这种形式管理知识的。
+人脑是通过节点与关系组织知识的。KnowNode 也以这种方式管理知识。
 
-- 基于 [DUI](https://github.com/xland/DUI) 原生 C++20 GUI 框架，不再依赖 WebView2。
+<p align="center">
+  <img src="./Doc/banner.png">
+</p>
+
+## 特性
+
+- 仅一个exe文件，零依赖
+- 体积很小：1.9MB
 - 所有内容保存在本机 `%APPDATA%\KnowNode\db.db`，不依赖网络。
-- 编译产物为单个 `KnowNode.exe`，图标与全部界面资源内嵌，运行时无需安装 WebView2 Runtime。
+- 纯原生，无浏览器依赖，资源消耗极低
 
-## 构建
+## 限制
 
-需要 Visual Studio 18（v145）与 Windows SDK 10.0。DUI 源码位于 `../DUI`，构建时自动编译 `DUI.lib`，发布时只需要 `KnowNode.exe`。
+- 仅支持 Windows 10 1703（build 15063），x64
 
-```cmd
-"C:\Program Files\Microsoft Visual Studio\18\Community\MSBuild\Current\Bin\MSBuild.exe" KnowNode.slnx /t:Build /p:Configuration=Release /p:Platform=x64 /m:1 /v:minimal /nologo
-```
+## 赞助
 
-产物：`x64\Release\KnowNode.exe`。
-
-## 使用
-
-### 知识列表（左栏）
-
-| 操作 | 做法 |
-| --- | --- |
-| 新建知识 | 点左栏标题行的 **＋**，输入名称后回车 |
-| 切换知识 | 单击列表项 |
-| 重命名 / 删除 | 右键列表项 |
-
-### 画布（中栏）
-
-| 操作 | 做法 |
-| --- | --- |
-| 新建节点 | 画布空白处右键 → **新建节点** |
-| 新建关联节点 | 右键节点 → **新建关联节点** |
-| 改标题 | 双击节点，或右键 → **重命名**（最多 36 字符） |
-| 移动节点 / 平移画布 | 拖拽节点 / 拖拽空白处 |
-| 缩放 | 滚轮（以视口中心为锚点，范围 0.3–3.0） |
-| 标记颜色 | 右键节点或连线 → **标记颜色** |
-| 删除 | 右键节点或连线 → 删除 |
-| 搜索 | 顶部搜索框输入标题，命中节点高亮边框 |
-| 复位视图 | 顶部 **复位视图** 按钮 |
-
-### 详情（右栏）
-
-单击节点或连线，右栏自动展开并显示对应详情；单击画布空白处收起右栏。
-
-- 富文本工具条：标题、正文、列表、引用、代码、图片。
-- 编辑内容每 300ms 自动落盘，切换对象或关闭窗口时立即保存。
-- 图片可直接 `Ctrl+V` 粘贴位图、粘贴文件，或从资源管理器拖入编辑区；图片以 data URI 内联在详情 JSON 中。
-- 快捷键：`Ctrl+Z` / `Ctrl+Y` 撤销重做，`Ctrl+A` / `C` / `X` / `V` 全选与剪贴板操作。
-
-## 当前版本的取舍
-
-这是全新实现，不兼容旧版 `db.db` 中的 HTML 详情数据。画布交互做了简化：不支持多选、框选、从节点边缘拉线、以鼠标为锚点缩放和空格拖动画布；中文 IME 使用系统候选窗，不做内联 preedit。详情数据采用 DUI `RichDoc` 的 JSON 格式存储。
+<table>
+  <tr>
+    <td align="center">
+      <img alt="支付宝赞助" src="./Doc/alipay.jpg" width="160" height="160">
+      <p>支付宝赞助</p>
+    </td>
+    <td align="center">
+      <img alt="微信赞助" src="./Doc/wechat.png" width="160" height="160">
+      <p>微信赞助</p>
+    </td>
+    <td align="center">
+      <img alt="作者微信" src="./Doc/author.jpg" width="160" height="160">
+      <p>作者微信</p>
+    </td>
+    <td align="center">
+      <img alt="公众号二维码" src="./Doc/gongzhonghao.jpg" width="160" height="160">
+      <p>公众号：桌面软件</p>
+    </td>
+  </tr>
+</table>

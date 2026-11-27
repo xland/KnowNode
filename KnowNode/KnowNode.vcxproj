@@ -54,7 +54,6 @@
     </ClCompile>
     <Link>
       <SubSystem>Windows</SubSystem>
-      <GenerateDebugInformation>true</GenerateDebugInformation>
       <AdditionalDependencies>DUI.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <AdditionalLibraryDirectories>$(ProjectDir)..\..\DUI\Build\DUI\$(Configuration)\;%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
@@ -66,6 +65,9 @@
     <ClCompile>
       <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
+    <Link>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+    </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <ClCompile>
@@ -96,7 +98,10 @@
     <ClCompile Include="ImageAssetStore.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="RichDocStore.cpp" />
-    <ClCompile Include="SQLite\sqlite3.c" />
+    <ClCompile Include="SQLite\sqlite3.c">
+      <!-- 单线程访问（DB 全在 UI 线程）+ 只用到基础 SQL；按实际用法裁剪 amalgamation，减小产物。 -->
+      <PreprocessorDefinitions>SQLITE_THREADSAFE=0;SQLITE_OMIT_DEPRECATED;SQLITE_OMIT_LOAD_EXTENSION;SQLITE_OMIT_SHARED_CACHE;SQLITE_OMIT_WAL;SQLITE_OMIT_TRACE;SQLITE_OMIT_PROGRESS_CALLBACK;SQLITE_OMIT_EXPLAIN;SQLITE_OMIT_DESERIALIZE;SQLITE_OMIT_DECLTYPE;SQLITE_OMIT_JSON;SQLITE_DEFAULT_MEMSTATUS=0;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </ClCompile>
     <ClCompile Include="Util.cpp" />
   </ItemGroup>
   <ItemGroup>

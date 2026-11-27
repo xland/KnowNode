@@ -1,12 +1,12 @@
 #include "winres.h"
 
-100 ICON "..\\Doc\\logo.ico"
+100 ICON "Resources\\logo.ico"
 
 IDR_ICONFONT     RCDATA "Resources\\iconfont.ttf"
 
 VS_VERSION_INFO VERSIONINFO
-FILEVERSION 1, 0, 0, 0
-PRODUCTVERSION 1, 0, 0, 0
+FILEVERSION 0, 0, 6, 0
+PRODUCTVERSION 0, 0, 6, 0
 FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
     FILEFLAGS 0x1L
@@ -23,12 +23,12 @@ BEGIN
         BEGIN
             VALUE "CompanyName", "GitHub xland"
             VALUE "FileDescription", "KnowNode"
-            VALUE "FileVersion", "1.0.0.0"
+            VALUE "FileVersion", "0.0.6.0"
             VALUE "InternalName", "KnowNode.exe"
             VALUE "LegalCopyright", "Copyright (C) LiuXiaolun 2026"
             VALUE "OriginalFilename", "KnowNode.exe"
             VALUE "ProductName", "KnowNode"
-            VALUE "ProductVersion", "1.0.0.0"
+            VALUE "ProductVersion", "0.0.6.0"
         END
     END
     BLOCK "VarFileInfo"
